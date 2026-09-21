@@ -1,0 +1,11 @@
+node_modules
+.next
+npm-debug.log*
+yarn.lock
+.DS_Store
+.vscode
+.env
+.env.*
+*.log
+.git
+.gitignore
