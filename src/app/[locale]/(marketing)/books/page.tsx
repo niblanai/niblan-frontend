@@ -1,10 +1,11 @@
-import React from 'react';
+import { BookReader } from '@/components/books/BookReader';
 
-export default function Page() {
-  return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 p-8">
-      <h1 className="text-4xl font-bold">NIBLAN Frontend</h1>
-      <p className="mt-4 text-lg">Placeholder page for the rebuilt Next.js app structure.</p>
-    </main>
-  );
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
+  return <BookReader locale={locale} />;
 }

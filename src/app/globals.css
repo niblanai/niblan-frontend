@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: Inter, system-ui, sans-serif;
 }
 
@@ -14,8 +14,8 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #F8F3E7;
-  color: #211B12;
+  background: #111318;
+  color: #f5ebd7;
 }
 
 * {
@@ -28,13 +28,39 @@ a {
 }
 
 ::selection {
-  background: #C69A3E;
-  color: #15130D;
+  background: #d8b66e;
+  color: #111318;
 }
 
-/* Make browser autofill (saved email/password) match the gold theme instead
-   of the default blue-grey. WebKit/Edge paint over the input background, so
-   we use a transition + box-shadow trick with the cream/gold palette. */
+.book-reader-surface {
+  touch-action: pan-y;
+  perspective: 1600px;
+}
+
+.page-stack {
+  transform-style: preserve-3d;
+}
+
+.book-page,
+.page-turning {
+  background-image:
+    linear-gradient(90deg, rgba(120, 90, 50, 0.06), rgba(255, 255, 255, 0.12) 12%, rgba(140, 112, 72, 0.08) 24%, rgba(87, 58, 24, 0.04) 100%);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.page-texture {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0) 25%, rgba(94, 76, 41, 0.04) 65%, rgba(84, 63, 36, 0.08)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(80, 60, 38, 0.035),
+      rgba(80, 60, 38, 0.035) 1px,
+      rgba(255,255,255,0.02) 1px,
+      rgba(255,255,255,0.02) 3px
+    );
+}
+
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
@@ -42,11 +68,9 @@ input:-webkit-autofill:active {
   -webkit-text-fill-color: #B78D34;
   caret-color: #211B12;
   transition: background-color 9999s ease-in-out 0s;
-  /* Light gold tint to match the inputs */
   box-shadow: 0 0 0px 1000px #FBF7EC inset;
 }
 
-/* Firefox autofill */
 input:autofill {
   -webkit-text-fill-color: #B78D34;
   caret-color: #211B12;
