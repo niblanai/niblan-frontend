@@ -1,8 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import HTMLFlipBook from 'react-pageflip';
 import { ReaderControls } from './ReaderControls';
+import { Bookmark } from 'lucide-react';
 
 type DemoPage = {
   id: string;
@@ -124,112 +131,251 @@ const DEMO_PAGES: DemoPage[] = [
   },
 ];
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+/* =========================
+   Book Page
+========================= */
+
+const BookPage = React.forwardRef<
+  HTMLDivElement,
+  {
+    page: DemoPage;
+    isArabic: boolean;
+    isZooming: boolean;
+  }
+>(({ page, isArabic, isZooming }, ref) => {
+  return (
+    <article
+      ref={ref}
+      className="book-page relative h-full w-full overflow-hidden rounded-[10px] border border-[#926e3d]/40 bg-[#f3ead3] shadow-[0_12px_20px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(54,29,8,0.08)] select-none"
+    >
+      <div className="page-texture pointer-events-none absolute inset-0 opacity-90" />
+
+      <div
+        className={`relative z-10 flex h-full w-full flex-col p-5 transition-transform duration-300 ease-out sm:p-7 ${
+          isZooming
+            ? isArabic
+              ? 'scale-[1.1] origin-right'
+              : 'scale-[1.1] origin-left'
+            : 'scale-100'
+        }`}
+      >
+        <div className="mb-2 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.22em] text-[#5d4631]">
+          <span>{page.label}</span>
+          <span>{page.pageNumber}</span>
+        </div>
+
+        <div className="mb-3 border-b border-[#8c6f46]/30 pb-2 text-right text-[12px] font-semibold text-[#4c3728]">
+          {page.chapter}
+        </div>
+
+        <h2 className="mb-4 text-right text-[26px] font-semibold leading-tight text-[#2a1f17]">
+          {page.title}
+        </h2>
+
+        <div className="flex-1 space-y-4 text-right text-[13px] leading-7 text-[#2d231c]">
+          {page.paragraphs.map((paragraph) => (
+            <p
+              key={`${page.id}-${paragraph.slice(0, 10)}`}
+              className="text-pretty"
+            >
+              {paragraph}
+            </p>
+          ))}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between text-[10px] tracking-[0.16em] text-[#5a4031]">
+          <span>{isArabic ? 'نِبلان' : 'NIBLAN'}</span>
+          <span>{page.pageNumber}</span>
+        </div>
+      </div>
+    </article>
+  );
+});
+
+BookPage.displayName = 'BookPage';
+
+/* =========================
+   Book Reader
+========================= */
 
 export function BookReader({ locale = 'ar' }: { locale?: string }) {
   const isArabic = locale === 'ar';
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [dragState, setDragState] = useState({
-    active: false,
-    startX: 0,
-    direction: 1 as 1 | -1,
-    progress: 0,
-  });
 
-  const totalPages = DEMO_PAGES.length;
-  const currentPage = DEMO_PAGES[currentIndex];
-  const nextPage = DEMO_PAGES[currentIndex + 1] ?? DEMO_PAGES[currentIndex];
-  const previousPage = DEMO_PAGES[currentIndex - 1] ?? DEMO_PAGES[currentIndex];
+  const bookRef = useRef<any>(null);
+  const fullscreenRef = useRef<HTMLDivElement>(null);
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [savedPage, setSavedPage] = useState<number | null>(null);
+  const [zoomingPage, setZoomingPage] = useState<number | null>(null);
+
+  const pages = useMemo(
+    () => (isArabic ? [...DEMO_PAGES].reverse() : DEMO_PAGES),
+    [isArabic]
+  );
+
+  const totalPages = pages.length;
 
   const pagePairs = useMemo(
     () =>
-      Array.from({ length: totalPages }, (_, index) => ({
-        left: DEMO_PAGES[index],
-        right: DEMO_PAGES[index + 1] ?? DEMO_PAGES[index],
-      })),
-    [totalPages],
+      Array.from({ length: Math.ceil(totalPages / 2) }, (_, index) => {
+        const leftIdx = index * 2;
+        const rightIdx = leftIdx + 1;
+
+        return {
+          left: pages[leftIdx],
+          right: pages[rightIdx] ?? pages[leftIdx],
+          pairIndex: index,
+        };
+      }),
+    [pages, totalPages]
   );
 
-  const turnPage = useCallback(
-    (direction: 1 | -1) => {
-      setCurrentIndex((previous) => clamp(previous + direction, 0, totalPages - 1));
-    },
-    [totalPages],
-  );
+  /* =========================
+     Navigation
+  ========================= */
 
-  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const localX = event.clientX - rect.left;
-    const nearRight = localX > rect.width * 0.72;
-    const nearLeft = localX < rect.width * 0.28;
-    const direction = nearRight ? 1 : nearLeft ? -1 : 0;
-
-    if (direction === 0) return;
-    if ((direction === 1 && currentIndex >= totalPages - 1) || (direction === -1 && currentIndex <= 0)) return;
-
-    setDragState({ active: true, startX: event.clientX, direction, progress: 0 });
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
+  const handleFlipNext = () => {
+    if (bookRef.current) {
+      isArabic
+        ? bookRef.current.pageFlip().flipPrev()
+        : bookRef.current.pageFlip().flipNext();
+    }
   };
 
-  const updateDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!dragState.active) return;
-
-    const delta = event.clientX - dragState.startX;
-    const travel = Math.abs(delta);
-    const progress = clamp(travel / 430, 0, 1);
-
-    setDragState((previous) => ({ ...previous, progress }));
+  const handleFlipPrev = () => {
+    if (bookRef.current) {
+      isArabic
+        ? bookRef.current.pageFlip().flipNext()
+        : bookRef.current.pageFlip().flipPrev();
+    }
   };
 
-  const endDrag = () => {
-    if (!dragState.active) return;
+  /* =========================
+     Fullscreen
+  ========================= */
 
-    const shouldTurn = dragState.progress > 0.42;
-    if (shouldTurn) turnPage(dragState.direction);
+  const handleFullscreen = async () => {
+    if (!fullscreenRef.current) return;
 
-    setDragState({ active: false, startX: 0, direction: dragState.direction, progress: 0 });
+    if (!document.fullscreenElement) {
+      await fullscreenRef.current.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
+    }
   };
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowRight' || event.key === 'PageDown') turnPage(1);
-      if (event.key === 'ArrowLeft' || event.key === 'PageUp') turnPage(-1);
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [turnPage]);
+    document.addEventListener(
+      'fullscreenchange',
+      handleFullscreenChange
+    );
 
-  const turningPage = dragState.active ? (dragState.direction === 1 ? nextPage : previousPage) : currentPage;
-  const leftPage = dragState.active ? (dragState.direction === 1 ? currentPage : previousPage) : currentPage;
-  const rightPage = dragState.active ? (dragState.direction === 1 ? nextPage : currentPage) : nextPage;
+    return () => {
+      document.removeEventListener(
+        'fullscreenchange',
+        handleFullscreenChange
+      );
+    };
+  }, []);
 
-  const flipRotation = dragState.active ? dragState.progress * 170 : 0;
-  const flipTranslate = dragState.active ? dragState.progress * 18 : 0;
-  const overlayTransform = dragState.active
-    ? dragState.direction === 1
-      ? `translateX(${flipTranslate}px) rotateY(${-flipRotation}deg)`
-      : `translateX(${-flipTranslate}px) rotateY(${flipRotation}deg)`
-    : 'translateX(0px) rotateY(0deg)';
+  /* =========================
+     Saved Page
+  ========================= */
 
-  const overlayTransformOrigin = dragState.active && dragState.direction === 1 ? 'left center' : 'right center';
+  useEffect(() => {
+    const saved = localStorage.getItem('book-saved-page');
+
+    if (saved !== null) {
+      setSavedPage(Number(saved));
+    }
+  }, []);
+
+  const handleSavePage = () => {
+    if (savedPage === currentIndex) {
+      localStorage.removeItem('book-saved-page');
+      setSavedPage(null);
+    } else {
+      localStorage.setItem(
+        'book-saved-page',
+        String(currentIndex)
+      );
+      setSavedPage(currentIndex);
+    }
+  };
+
+  /* =========================
+     Progress
+  ========================= */
+
+  const currentPageNumber =
+    pages[currentIndex]?.pageNumber ?? 1;
+
+  const progress = Math.round(
+    (currentPageNumber / totalPages) * 100
+  );
+
+  /* =========================
+     Select Page Pair
+  ========================= */
+
+  const handleSelectPagePair = (pairIndex: number) => {
+    if (bookRef.current) {
+      const targetPage = pairIndex * 2;
+
+      bookRef.current.pageFlip().turnToPage(targetPage);
+    }
+  };
+
+  /* =========================
+     Flip + Temporary Zoom
+  ========================= */
+
+  const onFlip = useCallback(
+    (e: { data: number }) => {
+      setCurrentIndex(e.data);
+
+      /*
+        Arabic:
+        الصفحة الجديدة المطلوبة تكون على اليمين.
+
+        English:
+        الصفحة الجديدة المطلوبة تكون على الشمال.
+      */
+      const targetPageIndex = isArabic
+        ? e.data
+        : e.data + 1;
+
+      setZoomingPage(targetPageIndex);
+
+      const timer = setTimeout(() => {
+        setZoomingPage(null);
+      }, 400);
+
+      return () => clearTimeout(timer);
+    },
+    [isArabic]
+  );
 
   return (
-    <main className="min-h-screen bg-[#14181d] px-4 py-6 text-[#f5ebd7] sm:px-6 lg:px-8" dir={isArabic ? 'rtl' : 'ltr'}>
+    <main
+      className="min-h-screen bg-[#14181d] px-4 py-6 text-[#f5ebd7] sm:px-6 lg:px-8"
+      dir={isArabic ? 'rtl' : 'ltr'}
+    >
       <div className="mx-auto max-w-[1500px]">
         <div className="mb-6 text-center">
           <p className="text-[10px] uppercase tracking-[0.35em] text-[#d2b57e] opacity-80 sm:text-xs">
             {isArabic ? 'قراءة مميزة' : 'Premium reader'}
           </p>
+
           <h1 className="mt-3 text-2xl font-semibold text-[#f7f0e1] sm:text-4xl">
-            {isArabic ? 'قراءة صفحة الكتاب' : 'Turn the pages of the book'}
+            {isArabic
+              ? 'قراءة صفحة الكتاب'
+              : 'Turn the pages of the book'}
           </h1>
         </div>
 
@@ -239,24 +385,36 @@ export function BookReader({ locale = 'ar' }: { locale?: string }) {
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d3ab62]/60 bg-[#2b2118] text-sm text-[#f4d79a]">
                 {isArabic ? 'ب' : 'B'}
               </span>
-              <span className="font-medium">{isArabic ? 'نِبلان' : 'NIBLAN'}</span>
+
+              <span className="font-medium">
+                {isArabic ? 'نِبلان' : 'NIBLAN'}
+              </span>
             </div>
 
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => turnPage(-1)}
+                onClick={handleFlipPrev}
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-[#f8e8c7] transition hover:border-[#d6b26b]/60 hover:bg-[#d6b26b]/10 disabled:cursor-not-allowed disabled:opacity-30"
-                aria-label={isArabic ? 'الصفحة السابقة' : 'Previous page'}
+                aria-label={
+                  isArabic
+                    ? 'الصفحة السابقة'
+                    : 'Previous page'
+                }
                 disabled={currentIndex === 0}
               >
                 {isArabic ? '›' : '‹'}
               </button>
+
               <button
                 type="button"
-                onClick={() => turnPage(1)}
+                onClick={handleFlipNext}
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-[#f8e8c7] transition hover:border-[#d6b26b]/60 hover:bg-[#d6b26b]/10 disabled:cursor-not-allowed disabled:opacity-30"
-                aria-label={isArabic ? 'الصفحة التالية' : 'Next page'}
+                aria-label={
+                  isArabic
+                    ? 'الصفحة التالية'
+                    : 'Next page'
+                }
                 disabled={currentIndex >= totalPages - 1}
               >
                 {isArabic ? '‹' : '›'}
@@ -266,161 +424,184 @@ export function BookReader({ locale = 'ar' }: { locale?: string }) {
 
           <div className="relative flex items-center justify-center overflow-hidden rounded-[18px] bg-[#151a1f] px-2 pb-3 pt-2 sm:px-4">
             <div
-              ref={containerRef}
-              className="book-reader-surface relative h-[540px] w-full max-w-[1100px] cursor-grab select-none touch-pan-y active:cursor-grabbing"
-              onPointerDown={beginDrag}
-              onPointerMove={updateDrag}
-              onPointerUp={endDrag}
-              onPointerLeave={endDrag}
-              aria-label={isArabic ? 'منطقة قراءة الكتاب' : 'Book reading area'}
+              ref={fullscreenRef}
+              className={`book-reader-surface relative flex h-[540px] w-full max-w-[1100px] items-center justify-center ${
+                isFullscreen ? 'bg-[#14181d]' : ''
+              }`}
             >
               <div className="book-surface absolute inset-0 rounded-[20px] bg-[radial-gradient(circle_at_top,_rgba(249,200,122,0.18),transparent_55%),linear-gradient(135deg,#161b21_0%,#0f1419_100%)]" />
 
               <div className="book-container absolute inset-x-[4%] inset-y-[3%]">
                 <div className="book-frame absolute inset-0 rounded-[18px] border border-[#7a5a2d]/40 bg-[#291c10] shadow-[inset_0_0_30px_rgba(0,0,0,0.38),0_28px_70px_rgba(0,0,0,0.45)]" />
-                <div className="book-spine absolute left-1/2 top-2 h-[calc(100%-1rem)] w-[18px] -translate-x-1/2 rounded-full bg-[linear-gradient(90deg,#25201d_0%,#7a5a24_18%,#e2c88f_50%,#7a5a24_82%,#1a1714_100%)] shadow-[0_0_20px_rgba(0,0,0,0.28)]" />
-                <div className="book-shade absolute inset-0 rounded-[18px] shadow-[inset_0_0_30px_rgba(0,0,0,0.2)]" />
 
-                <div className="page-stack absolute inset-[2%_7%_4%_7%] rounded-[10px]">
-                  <article
-                    className="book-page absolute inset-y-0 left-[2%] w-[47%] overflow-hidden rounded-[10px] border border-[#926e3d]/40 bg-[#f3ead3] shadow-[0_12px_20px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(54,29,8,0.08)]"
-                    style={{ opacity: 1, pointerEvents: 'auto' }}
+                <div className="book-shade pointer-events-none absolute inset-0 z-10 rounded-[18px] shadow-[inset_0_0_30px_rgba(0,0,0,0.2)]" />
+
+                <div className="page-stack absolute inset-[2%_7%_4%_7%] flex items-center justify-center rounded-[10px]">
+                  {/* @ts-ignore */}
+                  <HTMLFlipBook
+                    width={460}
+                    height={500}
+                    size="stretch"
+                    minWidth={300}
+                    maxWidth={500}
+                    minHeight={400}
+                    maxHeight={600}
+                    maxShadowOpacity={0.5}
+                    showCover={false}
+                    mobileScrollSupport={true}
+                    onFlip={onFlip}
+                    ref={bookRef}
+                    className="demo-book"
+                    usePortrait={true}
+                    startPage={0}
+                    drawShadow={true}
+                    flippingTime={800}
                   >
-                    <div className="page-texture absolute inset-0 opacity-90" />
-                    <div className="relative z-10 flex h-full flex-col p-5 sm:p-7">
-                      <div className="mb-2 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.22em] text-[#5d4631]">
-                        <span>{leftPage.label}</span>
-                        <span>{leftPage.pageNumber}</span>
-                      </div>
-                      <div className="mb-3 border-b border-[#8c6f46]/30 pb-2 text-right text-[12px] font-semibold text-[#4c3728]">
-                        {leftPage.chapter}
-                      </div>
-                      <h2 className="mb-4 text-right text-[26px] font-semibold leading-tight text-[#2a1f17]">
-                        {leftPage.title}
-                      </h2>
-                      <div className="flex-1 space-y-4 text-right text-[13px] leading-7 text-[#2d231c]">
-                        {leftPage.paragraphs.map((paragraph) => (
-                          <p key={`${leftPage.id}-${paragraph.slice(0, 10)}`} className="text-pretty">
-                            {paragraph}
-                          </p>
-                        ))}
-                      </div>
-                      <div className="mt-3 flex items-center justify-between text-[10px] tracking-[0.16em] text-[#5a4031]">
-                        <span>{isArabic ? 'نِبلان' : 'NIBLAN'}</span>
-                        <span>{leftPage.pageNumber}</span>
-                      </div>
-                    </div>
-                  </article>
-
-                  <article
-                    className="book-page absolute inset-y-0 right-[2%] w-[47%] overflow-hidden rounded-[10px] border border-[#8f6d40]/40 bg-[#f5ead3] shadow-[0_12px_20px_rgba(0,0,0,0.22),inset_0_0_0_1px_rgba(54,29,8,0.08)]"
-                    style={{ opacity: 1, pointerEvents: 'auto' }}
-                  >
-                    <div className="page-texture absolute inset-0 opacity-90" />
-                    <div className="relative z-10 flex h-full flex-col p-5 sm:p-7">
-                      <div className="mb-2 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.22em] text-[#5d4631]">
-                        <span>{rightPage.label}</span>
-                        <span>{rightPage.pageNumber}</span>
-                      </div>
-                      <div className="mb-3 border-b border-[#8c6f46]/30 pb-2 text-right text-[12px] font-semibold text-[#4c3728]">
-                        {rightPage.chapter}
-                      </div>
-                      <h2 className="mb-4 text-right text-[26px] font-semibold leading-tight text-[#2a1f17]">
-                        {rightPage.title}
-                      </h2>
-                      <div className="flex-1 space-y-4 text-right text-[13px] leading-7 text-[#2d231c]">
-                        {rightPage.paragraphs.map((paragraph) => (
-                          <p key={`${rightPage.id}-${paragraph.slice(0, 10)}`} className="text-pretty">
-                            {paragraph}
-                          </p>
-                        ))}
-                      </div>
-                      <div className="mt-3 flex items-center justify-between text-[10px] tracking-[0.16em] text-[#5a4031]">
-                        <span>{isArabic ? 'نِبلان' : 'NIBLAN'}</span>
-                        <span>{rightPage.pageNumber}</span>
-                      </div>
-                    </div>
-                  </article>
-
-                  {dragState.active && (
-                    <article
-                      className="page-turning absolute inset-y-[1.25%] right-[2%] w-[47%] overflow-hidden rounded-[10px] border border-[#8d6d3d]/40 bg-[#f5ead4] shadow-[0_20px_35px_rgba(0,0,0,0.35)]"
-                      style={{
-                        transform: overlayTransform,
-                        transformOrigin: overlayTransformOrigin,
-                        opacity: 0.98,
-                        boxShadow: '0 18px 30px rgba(0,0,0,0.32)',
-                        zIndex: 30,
-                      }}
-                    >
-                      <div className="page-texture absolute inset-0 opacity-95" />
-                      <div className="absolute inset-y-0 left-0 w-5 bg-[linear-gradient(90deg,rgba(75,46,16,0.12),rgba(75,46,16,0.0))]" />
-                      <div className="relative z-10 flex h-full flex-col p-5 sm:p-7">
-                        <div className="mb-2 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.22em] text-[#5d4631]">
-                          <span>{turningPage.label}</span>
-                          <span>{turningPage.pageNumber}</span>
-                        </div>
-                        <div className="mb-3 border-b border-[#8c6f46]/30 pb-2 text-right text-[12px] font-semibold text-[#4c3728]">
-                          {turningPage.chapter}
-                        </div>
-                        <h2 className="mb-4 text-right text-[26px] font-semibold leading-tight text-[#2a1f17]">
-                          {turningPage.title}
-                        </h2>
-                        <div className="flex-1 space-y-4 text-right text-[13px] leading-7 text-[#2d231c]">
-                          {turningPage.paragraphs.map((paragraph) => (
-                            <p key={`${turningPage.id}-${paragraph.slice(0, 10)}`} className="text-pretty">
-                              {paragraph}
-                            </p>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex items-center justify-between text-[10px] tracking-[0.16em] text-[#5a4031]">
-                          <span>{isArabic ? 'نِبلان' : 'NIBLAN'}</span>
-                          <span>{turningPage.pageNumber}</span>
-                        </div>
-                      </div>
-                    </article>
-                  )}
+                    {pages.map((page, index) => (
+                      <BookPage
+                        key={page.id}
+                        page={page}
+                        isArabic={isArabic}
+                        isZooming={index === zoomingPage}
+                      />
+                    ))}
+                  </HTMLFlipBook>
                 </div>
+              </div>
+
+              <div className="absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleSavePage}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-sm transition ${
+                    savedPage === currentIndex
+                      ? 'border-[#d6b26b] bg-[#d6b26b]/20 text-[#f4d79a]'
+                      : 'border-white/10 bg-black/40 text-white hover:bg-black/60'
+                  }`}
+                  aria-label={
+                    isArabic
+                      ? 'حفظ الصفحة'
+                      : 'Save page'
+                  }
+                >
+                  <Bookmark
+                    size={18}
+                    fill={
+                      savedPage === currentIndex
+                        ? 'currentColor'
+                        : 'none'
+                    }
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleFullscreen}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-lg text-white backdrop-blur-sm transition hover:bg-black/60"
+                  aria-label={
+                    isFullscreen
+                      ? 'Exit fullscreen'
+                      : 'Fullscreen'
+                  }
+                >
+                  ⛶
+                </button>
               </div>
             </div>
           </div>
 
-          <ReaderControls currentIndex={currentIndex} totalPages={totalPages} onPrevious={() => turnPage(-1)} onNext={() => turnPage(1)} locale={locale} />
+          <div>
+            <div className="relative">
+              <ReaderControls
+                currentIndex={currentIndex}
+                totalPages={totalPages}
+                onPrevious={handleFlipPrev}
+                onNext={handleFlipNext}
+                locale={locale}
+              />
+            </div>
+
+            <div className="mt-3 px-4">
+              <div className="mb-2 flex items-center justify-between text-xs text-[#e9d9b8]">
+                <span>
+                  {isArabic
+                    ? 'تقدم القراءة'
+                    : 'Reading progress'}
+                </span>
+
+                <span>{progress}%</span>
+              </div>
+
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[#d6b26b] transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
 
           <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {pagePairs.map((pair, index) => {
-              const isSelected = index === currentIndex;
+            {pagePairs.map((pair) => {
+              const activePairIndex =
+                Math.floor(currentIndex / 2);
+
+              const isSelected =
+                pair.pairIndex === activePairIndex;
+
               return (
                 <button
                   key={`${pair.left.id}-${pair.right.id}`}
                   type="button"
-                  onClick={() => setCurrentIndex(index)}
+                  onClick={() =>
+                    handleSelectPagePair(pair.pairIndex)
+                  }
                   className={`group w-full rounded-[16px] border p-3 text-right shadow-[0_16px_30px_rgba(0,0,0,0.15)] transition ${
-                    isSelected ? 'border-[#d8b871] bg-[#1f2329]' : 'border-white/10 bg-[#171b20] hover:border-[#d4b06a]/40 hover:bg-[#1a1f28]'
+                    isSelected
+                      ? 'border-[#d8b871] bg-[#1f2329]'
+                      : 'border-white/10 bg-[#171b20] hover:border-[#d4b06a]/40 hover:bg-[#1a1f28]'
                   }`}
                 >
                   <div className="mb-3 flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-[#d9c39a]">
-                    <span>{index + 1}</span>
-                    <span>{isArabic ? 'الصفحة' : 'Page'}</span>
+                    <span>{pair.pairIndex + 1}</span>
+
+                    <span>
+                      {isArabic ? 'الصفحة' : 'Page'}
+                    </span>
                   </div>
+
                   <div className="relative mx-auto h-[120px] max-w-[290px] overflow-hidden rounded-[10px] border border-[#806841]/40 bg-[#f0e3b9] shadow-inner shadow-[#774d1c]/10">
-                    <div className="absolute inset-y-0 left-1/2 w-[14px] -translate-x-1/2 bg-[linear-gradient(90deg,#251d19,#825d2d,#e7cf9f,#825d2d,#1f1d1b)] shadow-[0_0_12px_rgba(0,0,0,0.18)]" />
+                    <div className="absolute inset-y-0 left-1/2 z-10 w-[14px] -translate-x-1/2 bg-[linear-gradient(90deg,#251d19,#825d2d,#e7cf9f,#825d2d,#1f1d1b)] shadow-[0_0_12px_rgba(0,0,0,0.18)]" />
+
                     <div className="absolute inset-y-2 left-[7%] w-[39%] rounded-[8px] bg-[#f3e9cf] ring-1 ring-black/5">
                       <div className="flex h-full flex-col justify-between p-3 text-[8px] text-[#31281d]">
                         <div className="flex items-center justify-between font-medium uppercase">
                           <span>{pair.left.label}</span>
-                          <span>{pair.left.pageNumber}</span>
+
+                          <span>
+                            {pair.left.pageNumber}
+                          </span>
                         </div>
-                        <div className="text-right text-[11px] font-semibold">{pair.left.title}</div>
+
+                        <div className="text-right text-[11px] font-semibold">
+                          {pair.left.title}
+                        </div>
                       </div>
                     </div>
+
                     <div className="absolute inset-y-2 right-[7%] w-[39%] rounded-[8px] bg-[#f8f0dc] ring-1 ring-black/5">
                       <div className="flex h-full flex-col justify-between p-3 text-[8px] text-[#31281d]">
                         <div className="flex items-center justify-between font-medium uppercase">
                           <span>{pair.right.label}</span>
-                          <span>{pair.right.pageNumber}</span>
+
+                          <span>
+                            {pair.right.pageNumber}
+                          </span>
                         </div>
-                        <div className="text-right text-[11px] font-semibold">{pair.right.title}</div>
+
+                        <div className="text-right text-[11px] font-semibold">
+                          {pair.right.title}
+                        </div>
                       </div>
                     </div>
                   </div>
