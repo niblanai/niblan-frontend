@@ -8,11 +8,5 @@ export function resolveApiBase(): string {
     return envBase;
   }
 
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol || 'https:';
-    const hostname = window.location.hostname || 'localhost';
-    return `${protocol}//${hostname}:8080/api/v1`;
-  }
-
   return 'https://desktop-ckusqv1.tail3f63c4.ts.net/api/v1';
 }
