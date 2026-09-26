@@ -1,4 +1,4 @@
-import { BookCatalog } from '@/components/books/BookCatalog/BookCatalog';
+import { BookCreator } from '@/components/books/BookCreator/BookCreator';
 
 export default async function Page({
   params,
@@ -6,6 +6,5 @@ export default async function Page({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-
-  return <BookCatalog locale={locale} />;
+  return <BookCreator locale={locale} />;
 }

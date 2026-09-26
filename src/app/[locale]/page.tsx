@@ -23,10 +23,9 @@ export default async function RootPage({ params }: RootPageProps) {
     <main className="min-h-screen bg-[#F8F3E7]">
       <Header locale={locale} />
 
-      <div className="max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6">
+      <div className="mx-auto flex max-w-[1536px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:px-8">
         <Sidebar locale={locale} />
-
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <HomeHero locale={locale} />
           <KnowledgeGates locale={locale} />
           <ContentHighlights locale={locale} />

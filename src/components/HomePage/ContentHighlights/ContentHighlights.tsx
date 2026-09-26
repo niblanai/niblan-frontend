@@ -1,18 +1,13 @@
+'use client';
+
 import Link from 'next/link';
-import React from 'react';
+import { useEffect, useState } from 'react';
 import SectionHeader from '../SectionHeader';
+import { Book, getPublicBooks } from '@/services/books.service';
 
 interface ContentHighlightsProps {
   locale: string;
 }
-
-// ⚠ All items below are transcribed from the design mockup as placeholder
-// content — swap for real data once the content API is wired up.
-const BOOKS = [
-  { ar: 'رحلة العقل', en: 'Journey of the Mind', ar_sub: 'استكشاف الذكاء البشري', en_sub: 'Exploring human intelligence', unit: '12', rating: 4.8, image: '/images/book-1.jpg' },
-  { ar: 'تاريخ الفلسفة', en: 'History of Philosophy', ar_sub: 'من اليونان إلى العصر الحديث', en_sub: 'From Greece to the modern era', unit: '18', rating: 4.7, image: '/images/book-2.jpg' },
-  { ar: 'الاقتصاد للمبتدئين', en: 'Economics for Beginners', ar_sub: 'فهم العالم من حولك', en_sub: 'Understanding the world around you', unit: '15', rating: 4.6, image: '/images/book-3.jpg' },
-];
 
 const AUDIO = [
   { ar: 'فن التفكير الواضح', en: 'The Art of Clear Thinking', minutes: 30, image: '/images/audio-1.jpg' },
@@ -25,14 +20,6 @@ const ARTICLES = [
   { ar: 'مستقبل التعليم في عصر الذكاء الاصطناعي', en: 'The future of education in the AI era', ar_author: 'سارة الخطيب', en_author: 'Sara Al Khatib', minutes: 7, image: '/images/article-2.jpg' },
   { ar: 'أسرار التركيز العميق', en: 'The secrets of deep focus', ar_author: 'محمد العبدالله', en_author: 'Mohamed Al Abdullah', minutes: 4, image: '/images/article-3.jpg' },
 ];
-
-function StarIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="#D9B565" stroke="none">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-    </svg>
-  );
-}
 
 function PlayIcon() {
   return (
@@ -54,6 +41,21 @@ function DotsIcon() {
 
 export default function ContentHighlights({ locale }: ContentHighlightsProps) {
   const isArabic = locale === 'ar';
+  const [books, setBooks] = useState<Book[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    getPublicBooks()
+      .then((items) => {
+        if (active) setBooks(items.slice(0, 3));
+      })
+      .catch(() => {
+        if (active) setBooks([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <section className="py-4">
@@ -62,29 +64,22 @@ export default function ContentHighlights({ locale }: ContentHighlightsProps) {
         <div className="bg-white border border-[#E8DFCB] rounded-2xl p-5">
           <SectionHeader
             title={isArabic ? 'كتب تفاعلية' : 'Interactive Books'}
-            viewAllHref={`/${locale}/interactive-books`}
+            viewAllHref={`/${locale}/books`}
             viewAllLabel={isArabic ? 'عرض الكل' : 'View all'}
           />
           <div className="space-y-4">
-            {BOOKS.map((book, i) => (
-              <Link key={i} href={`/${locale}/interactive-books/${i}`} className="flex gap-3 group">
+            {books.length === 0 && <p className="py-4 text-xs text-[#8A8172]">{isArabic ? 'لا توجد كتب منشورة بعد.' : 'No published books yet.'}</p>}
+            {books.map((book) => (
+              <Link key={book.id} href={`/${locale}/books/${book.id}`} className="flex gap-3 group">
                 <div className="relative w-16 h-20 shrink-0 rounded-lg overflow-hidden bg-[#EFE8D8]">
-                  <img src={book.image} alt="" className="w-full h-full object-cover" />
-                  <span className="absolute top-1 right-1 bg-[#C69A3E] text-[#15130D] text-[9px] font-bold px-1.5 py-0.5 rounded">
-                    {isArabic ? 'تفاعلي' : 'Interactive'}
-                  </span>
+                  {book.cover_url && <img src={book.cover_url} alt="" className="w-full h-full object-cover" />}
                 </div>
                 <div className="min-w-0">
                   <div className="font-semibold text-sm text-[#211B12] group-hover:text-[#C69A3E] transition truncate">
-                    {isArabic ? book.ar : book.en}
+                    {book.title}
                   </div>
-                  <div className="text-xs text-[#8A8172] mb-1.5 truncate">{isArabic ? book.ar_sub : book.en_sub}</div>
-                  <div className="flex items-center gap-3 text-xs text-[#8A8172]">
-                    <span>{book.unit} {isArabic ? 'قسم' : 'sections'}</span>
-                    <span className="flex items-center gap-1">
-                      <StarIcon /> {book.rating}
-                    </span>
-                  </div>
+                  <div className="text-xs text-[#8A8172] mb-1.5 truncate">{book.author_display_name}</div>
+                  <div className="text-xs text-[#8A8172] line-clamp-2">{book.description}</div>
                 </div>
               </Link>
             ))}
