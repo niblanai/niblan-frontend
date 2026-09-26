@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { getLastReadingProgress, type ReadingProgressEntry } from '@/services/reading-progress.service';
 
 interface HomeHeroProps {
   locale: string;
@@ -36,14 +39,22 @@ export default function HomeHero({
 }: HomeHeroProps) {
   const isArabic = locale === 'ar';
   const level = knowledgeLevelLabel ?? (isArabic ? 'مبتدئ' : 'Beginner');
+  const [lastRead, setLastRead] = useState<ReadingProgressEntry | null>(null);
+
+  useEffect(() => {
+    setLastRead(getLastReadingProgress());
+  }, []);
 
   const radius = 40;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progressPercent / 100) * circumference;
+  const continueReadingHref = lastRead
+    ? `/${locale}/books/${lastRead.bookId}#page-${Math.max(1, lastRead.page)}`
+    : `/${locale}/library`;
 
   return (
     <section className="pt-6">
-      <div className="relative rounded-3xl overflow-hidden min-h-[420px] md:min-h-[520px] flex flex-col md:flex-row md:items-end md:justify-end bg-[#2A2418]">
+      <div className={`relative rounded-3xl overflow-hidden min-h-[420px] md:min-h-[520px] flex flex-col md:flex-row md:items-end bg-[#2A2418] ${isArabic ? 'md:justify-start' : 'md:justify-between'}`}>
         {/* ⚠ placeholder hero image — replace with the real city illustration asset */}
         <img
           src="/images/hero-city.jpg"
@@ -53,7 +64,7 @@ export default function HomeHero({
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/10" />
 
         {/* Knowledge level card — stacked block on mobile, floating card from md up */}
-        <div className="relative md:absolute md:top-6 md:right-6 z-10 w-64 mx-auto mt-6 md:mx-0 md:mt-0 bg-[#15130D]/90 backdrop-blur-sm rounded-2xl p-5 text-white">
+        <div className={`relative z-10 order-1 mt-6 w-64 shrink-0 rounded-2xl bg-[#15130D]/90 p-5 text-white backdrop-blur-sm md:absolute md:top-6 md:mt-0 ${isArabic ? 'mx-auto md:right-6 md:order-1' : 'mx-auto md:left-6 md:order-1'}`}>
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm text-white/70">{isArabic ? 'مستواك المعرفي' : 'Your knowledge level'}</span>
             <span className="flex items-center gap-1 bg-[#C69A3E]/20 text-[#D9B565] text-xs font-semibold px-2 py-1 rounded-full">
@@ -104,7 +115,7 @@ export default function HomeHero({
         </div>
 
         {/* Welcome copy */}
-        <div className="relative z-10 p-6 pt-4 md:p-12 max-w-full md:max-w-[min(36rem,calc(100%-19rem))]">
+        <div className={`relative z-10 order-2 max-w-full p-6 pt-4 md:p-12 ${isArabic ? 'md:mr-[18rem] md:text-right' : 'md:ml-[18rem] md:text-left'} md:max-w-[min(36rem,calc(100%-19rem))]`}>
           <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-2">
             {isArabic ? 'مرحبًا بك في نبلان' : 'Welcome to Niblan'}
           </h1>
@@ -119,7 +130,7 @@ export default function HomeHero({
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href={`/${locale}/library`}
+              href={continueReadingHref}
               className="flex items-center gap-2 bg-white hover:bg-white/90 text-[#15130D] font-semibold px-6 py-3 rounded-xl transition"
             >
               <BookIcon />
@@ -132,6 +143,12 @@ export default function HomeHero({
               {isArabic ? 'اكتشف المدينة' : 'Discover the city'}
             </Link>
           </div>
+
+          {lastRead?.bookTitle && (
+            <p className="mt-3 text-sm text-white/80">
+              {isArabic ? 'آخر قراءة:' : 'Last read:'} {lastRead.bookTitle}
+            </p>
+          )}
         </div>
       </div>
     </section>

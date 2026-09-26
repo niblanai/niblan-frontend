@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React from 'react';
 import CreateMenu from '../CreateMenu';
 import { formatCount, useCurrentUser } from '../../../hooks/useCurrentUser';
+import { clearToken } from '@/services/auth.service';
 
 interface SidebarProps {
   locale: string;
@@ -20,7 +22,7 @@ const NAV_ITEMS = [
   { ar: 'غرفي', en: 'My Rooms', href: 'my-rooms', icon: 'room' },
   { ar: 'مقالاتي', en: 'My Articles', href: 'my-articles', icon: 'article' },
   { ar: 'التسجيلات المحفوظة', en: 'Saved Recordings', href: 'saved-recordings', icon: 'save' },
-  { ar: 'الكتب التفاعلية', en: 'Interactive Books', href: 'interactive-books', icon: 'interactive' },
+  { ar: 'الكتب التفاعلية', en: 'Interactive Books', href: 'books', icon: 'interactive' },
   { ar: 'المفضلة', en: 'Favorites', href: 'favorites', icon: 'star' },
   { ar: 'إنجازاتي', en: 'My Achievements', href: 'achievements', icon: 'trophy' },
   { ar: 'إعدادات الحساب', en: 'Account Settings', href: 'settings', icon: 'settings' },
@@ -45,14 +47,22 @@ function icon(name: string) {
     case 'star': return <svg {...common} fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>;
     case 'trophy': return <svg {...common}><path d="M8 4h8v4a4 4 0 01-8 0V4z" /><path d="M8 4H5a3 3 0 003 3M16 4h3a3 3 0 01-3 3M10 14v3m4-3v3M8 20h8" /></svg>;
     case 'settings': return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.3.9a7 7 0 00-2-1.2L14 3h-4l-.6 2.5a7 7 0 00-2 1.2l-2.3-.9-2 3.4 2 1.6a7 7 0 000 2.4l-2 1.6 2 3.4 2.3-.9a7 7 0 002 1.2L10 21h4l.6-2.5a7 7 0 002-1.2l2.3.9 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z" /></svg>;
+    case 'logout': return <svg {...common}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>;
     default: return null;
   }
 }
 
 export default function Sidebar({ locale }: SidebarProps) {
   const isArabic = locale === 'ar';
+  const router = useRouter();
   // Real data: name/avatar/counts come from GET /users/me (cached per page).
   const { user } = useCurrentUser();
+
+  const handleLogout = () => {
+    clearToken();
+    router.push(`/${locale}/auth/login`);
+    router.refresh();
+  };
 
   return (
     <aside className="w-full lg:w-[300px] shrink-0 space-y-4">
@@ -105,6 +115,16 @@ export default function Sidebar({ locale }: SidebarProps) {
             </Link>
           ))}
         </nav>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-2 flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition text-white/70 hover:bg-white/5 hover:text-white"
+        >
+          {icon('logout')}
+          {isArabic ? 'تسجيل الخروج' : 'Log out'}
+        </button>
+
         {/* Replaced the dead /create link with the same dropdown used in the
             Header — "sidebar" variant renders the full-width button shape. */}
         <CreateMenu locale={locale} variant="sidebar" />

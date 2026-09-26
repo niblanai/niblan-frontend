@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import CreatePostModal from '../../posts/CreatePostModal';
 
 interface CreateMenuProps {
@@ -15,6 +16,7 @@ interface CreateMenuProps {
 // (book, article, podcast, ...) can be appended later without touching the
 // menu wiring.
 export default function CreateMenu({ locale, variant = 'header' }: CreateMenuProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [postModalOpen, setPostModalOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,16 +55,17 @@ export default function CreateMenu({ locale, variant = 'header' }: CreateMenuPro
         setPostModalOpen(true);
       },
     },
-    // Placeholder slots for future creation types — disabled until built.
     {
       id: 'book',
       label: isArabic ? 'كتاب تفاعلي' : 'Interactive book',
-      desc: isArabic ? 'قريباً' : 'Coming soon',
+      desc: isArabic ? 'اكتب كتابك وانشره' : 'Write and publish a book',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
       ),
-      disabled: true,
-      onSelect: () => {},
+      onSelect: () => {
+        setOpen(false);
+        router.push(`/${locale}/books/create`);
+      },
     },
     {
       id: 'article',

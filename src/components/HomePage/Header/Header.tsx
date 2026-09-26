@@ -17,7 +17,8 @@ const NAV_ITEMS = [
   { ar: 'الغرف', en: 'Rooms', href: 'rooms' },
   { ar: 'المقالات', en: 'Articles', href: 'articles' },
   { ar: 'التسجيلات الصوتية', en: 'Audio', href: 'audio' },
-  { ar: 'الكتب التفاعلية', en: 'Interactive Books', href: 'interactive-books' },
+  { ar: 'الكتب التفاعلية', en: 'Interactive Books', href: 'books' },
+  { ar: 'المفضلة', en: 'Favorites', href: 'favorites' },
   { ar: 'المسابقات', en: 'Competitions', href: 'competitions' },
   { ar: 'المجتمع', en: 'Community', href: 'community' },
 ];

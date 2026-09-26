@@ -1,5 +1,6 @@
 node_modules
 .next
+.next-books-build
 npm-debug.log*
 yarn.lock
 .DS_Store

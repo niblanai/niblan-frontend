@@ -1,1 +1,1 @@
-export {};
+export { BookDetail } from './BookDetail';
