@@ -50,16 +50,88 @@ a {
   -webkit-backface-visibility: hidden;
 }
 
+.book-page--cover-backed {
+  overflow: visible !important;
+  isolation: isolate;
+}
+
+.book-page--cover-backed::before {
+  position: absolute;
+  z-index: -1;
+  inset: -7px;
+  border: 1px solid #9a7644;
+  border-radius: 6px;
+  background: linear-gradient(145deg, #5b412e, #362316 72%);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.32);
+  content: '';
+  pointer-events: none;
+}
+
 .page-texture {
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0) 25%, rgba(94, 76, 41, 0.04) 65%, rgba(84, 63, 36, 0.08)),
-    repeating-linear-gradient(
-      0deg,
-      rgba(80, 60, 38, 0.035),
-      rgba(80, 60, 38, 0.035) 1px,
-      rgba(255,255,255,0.02) 1px,
-      rgba(255,255,255,0.02) 3px
-    );
+  background-image: url('../../old-paper-texture-3-2-624x468.jpg');
+  background-size: 200% auto;
+}
+
+.page-texture--left {
+  background-position: left center;
+}
+
+.page-texture--right {
+  background-position: right center;
+}
+
+.book-cover-page {
+  background-color: #362316;
+  background-position: center;
+  background-size: cover;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  isolation: isolate;
+}
+
+.book-cover-image {
+  top: -7px !important;
+  left: -7px !important;
+  width: calc(100% + var(--page-stack-depth, 0px) + 1px) !important;
+  height: calc(100% + 16px) !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+[dir='rtl'] .book-cover-image {
+  right: calc(0px - var(--page-stack-depth, 0px) + 7px) !important;
+  left: auto !important;
+}
+
+.book-back-cover-page {
+  background: linear-gradient(145deg, #49301e, #211911 72%);
+}
+
+.demo-book::after {
+  position: absolute;
+  top: 3px;
+  right: calc(0px - var(--page-stack-depth));
+  z-index: 0;
+  width: var(--page-stack-depth, 0px);
+  height: calc(100% - 6px);
+  border: 1px solid rgba(128, 103, 63, 0.75);
+  background-color: #efe1c4;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(107, 82, 49, 0.36) 0 1px, transparent 1px 5px),
+    linear-gradient(rgba(243, 234, 211, 0.72), rgba(243, 234, 211, 0.72)),
+    url('../../old-paper-texture-3-2-624x468.jpg');
+  background-position: left top, center, right center;
+  background-size: 5px 100%, 100% 100%, auto 100%;
+  background-repeat: repeat, no-repeat, no-repeat;
+  box-shadow: 5px 2px 8px rgba(0, 0, 0, 0.28);
+  content: '';
+  pointer-events: none;
+  transform: none;
+  transition: width 800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.demo-book .stf__block {
+  z-index: 1;
 }
 
 input:-webkit-autofill,
