@@ -3,6 +3,9 @@ type ReaderControlsProps = {
   totalPages: number;
   onPrevious: () => void;
   onNext: () => void;
+  canPrevious?: boolean;
+  canNext?: boolean;
+  isCover?: boolean;
   locale?: string;
 };
 
@@ -11,6 +14,9 @@ export function ReaderControls({
   totalPages,
   onPrevious,
   onNext,
+  canPrevious = currentIndex > 0,
+  canNext = currentIndex < totalPages - 1,
+  isCover = false,
   locale = 'ar',
 }: ReaderControlsProps) {
   const isArabic = locale === 'ar';
@@ -23,7 +29,7 @@ export function ReaderControls({
           onClick={onPrevious}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-lg transition hover:border-[#d4b06a]/40 hover:bg-[#d4b06a]/10 disabled:cursor-not-allowed disabled:opacity-30"
           aria-label={isArabic ? 'الصفحة السابقة' : 'Previous page'}
-          disabled={currentIndex === 0}
+          disabled={!canPrevious}
         >
           {isArabic ? '‹' : '‹'}
         </button>
@@ -32,7 +38,7 @@ export function ReaderControls({
           onClick={onNext}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-lg transition hover:border-[#d4b06a]/40 hover:bg-[#d4b06a]/10 disabled:cursor-not-allowed disabled:opacity-30"
           aria-label={isArabic ? 'الصفحة التالية' : 'Next page'}
-          disabled={currentIndex >= totalPages - 1}
+          disabled={!canNext}
         >
           {isArabic ? '›' : '›'}
         </button>
@@ -40,8 +46,8 @@ export function ReaderControls({
 
       <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[#d9c39a]">
         <span>{isArabic ? 'الصفحة' : 'PAGE'}</span>
-        <span className="rounded-full border border-[#d6b26b]/40 bg-[#d6b26b]/10 px-3 py-1 text-sm font-medium text-[#f9f0d6]">
-          {currentIndex + 1} / {totalPages}
+          <span className="rounded-full border border-[#d6b26b]/40 bg-[#d6b26b]/10 px-3 py-1 text-sm font-medium text-[#f9f0d6]">
+          {isCover ? (isArabic ? 'الغلاف' : 'COVER') : `${Math.min(currentIndex + 1, totalPages)} / ${totalPages}`}
         </span>
       </div>
     </div>

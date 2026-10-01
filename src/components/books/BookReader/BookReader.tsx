@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import HTMLFlipBook from 'react-pageflip';
+import Image from 'next/image';
 import { ReaderControls } from './ReaderControls';
 import { Bookmark } from 'lucide-react';
 import DOMPurify from 'isomorphic-dompurify';
@@ -146,9 +147,11 @@ const BookPage = React.forwardRef<
   return (
     <article
       ref={ref}
-      className="book-page relative h-full w-full overflow-hidden rounded-[5px] border border-[#b99562] bg-[#f3ead3] shadow-[0_75px_130px_rgba(0,0,0,0.45),0_35px_75px_rgba(0,0,0,0.25),inset_60px_20px_60px_-35px_rgba(10,10,0,0.2),inset_-60px_20px_60px_-35px_rgba(20,10,0,0.2)] select-none"
+      className={`book-page relative h-full w-full overflow-hidden rounded-[5px] border border-[#b99562] bg-[#f3ead3] shadow-[0_75px_130px_rgba(0,0,0,0.45),0_35px_75px_rgba(0,0,0,0.25),inset_60px_20px_60px_-35px_rgba(10,10,0,0.2),inset_-60px_20px_60px_-35px_rgba(20,10,0,0.2)] select-none ${page.pageNumber === 1 ? 'book-page--cover-backed' : ''}`}
     >
-      <div className="page-texture pointer-events-none absolute inset-0 opacity-90" />
+      <div
+        className={`page-texture page-texture--${page.pageNumber % 2 === 1 ? 'right' : 'left'} pointer-events-none absolute inset-0 opacity-90`}
+      />
 
       <div className="relative z-10 flex h-full w-full flex-col p-5 sm:p-7">
         <div className={`min-h-0 flex-1 transition-[filter] duration-300 ${isBlurred ? 'blur-[1.2px]' : 'blur-0'}`}>
@@ -179,6 +182,44 @@ const BookPage = React.forwardRef<
 
 BookPage.displayName = 'BookPage';
 
+const CoverPage = React.forwardRef<HTMLDivElement, { book: Book; isBackCover?: boolean }>(
+  ({ book, isBackCover = false }, ref) => (
+    <div
+      ref={ref}
+      data-density="hard"
+      className={`book-cover-page relative flex h-full w-full items-end overflow-visible rounded-[5px] border border-[#b99562] p-8 text-right text-[#fff4d7] shadow-[0_25px_45px_rgba(0,0,0,0.45)] ${isBackCover ? 'book-back-cover-page' : ''}`}
+    >
+      {!isBackCover && book.cover_url && (
+        <Image src={book.cover_url} alt={book.title} fill sizes="520px" priority unoptimized className="book-cover-image object-cover" />
+      )}
+      {isBackCover ? (
+        <div className="w-full border-t border-[#e0c487]/40 pt-4 text-center text-sm tracking-[0.18em] text-[#e0c487]">
+          {isArabicBook(book.language) ? 'نِبلان' : 'NIBLAN'}
+        </div>
+      ) : (
+        <div className="relative z-10 w-full bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pb-3 pt-16">
+          <h2 className="text-2xl font-semibold leading-tight">{book.title}</h2>
+          <p className="mt-2 text-sm text-white/80">{book.author_display_name}</p>
+        </div>
+      )}
+    </div>
+  ),
+);
+
+CoverPage.displayName = 'CoverPage';
+
+const BlankPage = React.forwardRef<HTMLDivElement>((_, ref) => (
+  <div ref={ref} className="book-page h-full w-full rounded-[5px] border border-[#b99562] bg-[#f3ead3]" aria-hidden="true">
+    <div className="page-texture page-texture--left h-full w-full opacity-90" />
+  </div>
+));
+
+BlankPage.displayName = 'BlankPage';
+
+function isArabicBook(language: Book['language']): boolean {
+  return language === 'ar';
+}
+
 /* =========================
    Book Reader
 ========================= */
@@ -207,8 +248,22 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
   // Zoom states
   const [isFlipping, setIsFlipping] = useState(false);
   const [viewMode, setViewMode] = useState<'left' | 'right' | 'spread'>('left');
+  const [flipDirection, setFlipDirection] = useState<'next' | 'previous'>('next');
 
   const totalPages = pages.length;
+  const totalFlipPages = totalPages + 2 + (totalPages % 2);
+  const lastFlipPageIndex = totalFlipPages - 1;
+  const activePage = pages[currentIndex - 1];
+  const controlsIndex = currentIndex === 0 ? -1 : Math.min(currentIndex - 1, totalPages - 1);
+  const canFlipNext = currentIndex < lastFlipPageIndex;
+  const stackPageIndex = isFlipping
+    ? flipDirection === 'next'
+      ? Math.min(lastFlipPageIndex, currentIndex === 0 ? currentIndex + 1 : currentIndex + 2)
+      : Math.max(0, currentIndex - 2)
+    : currentIndex;
+  const totalSheets = Math.ceil(totalPages / 2);
+  const consumedSheets = Math.floor(Math.max(0, stackPageIndex - 1) / 2);
+  const pageStackDepth = Math.max(0, totalSheets - consumedSheets) * 5;
 
   useEffect(() => {
     let active = true;
@@ -220,8 +275,8 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
       .then((item) => {
         if (active) {
           const bookPages = paginateBook(item, locale, bookId);
-          const requestedPage = Number(window.location.hash.match(/^#page-(\d+)$/)?.[1] ?? 1);
-          const firstPage = Math.max(0, Math.min(bookPages.length - 1, requestedPage - 1));
+          const requestedPage = Number(window.location.hash.match(/^#page-(\d+)$/)?.[1] ?? 0);
+          const firstPage = requestedPage > 0 ? Math.min(bookPages.length, requestedPage) : 0;
           setBook(item);
           setPages(bookPages);
           setCurrentIndex(firstPage);
@@ -248,8 +303,14 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
       };
     }
 
+    if (currentIndex === 0) {
+      return {
+        scale: 1.15,
+        translateX: -180,
+      };
+    }
+
     if (viewMode === 'left') {
-      // zoom على الجنب الأيسر
       return {
         scale: 1.15,
         translateX: 180,
@@ -257,25 +318,24 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
     }
 
     if (viewMode === 'right') {
-      // zoom على الجنب الأيمن
       return {
         scale: 1.15,
         translateX: -180,
       };
     }
 
-    // spread view
     return {
       scale: 1,
       translateX: 0,
     };
-  }, [isFlipping, viewMode]);
+  }, [currentIndex, isFlipping, viewMode]);
 
   /* =========================
      Navigation
   ========================= */
   const handleFlipNext = useCallback(() => {
     if (bookRef.current) {
+      setFlipDirection('next');
       setIsFlipping(true);
       setViewMode('spread');
       // في العربي: التقدم معناه flipNext (من اليسار لليمين)
@@ -286,6 +346,7 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
 
   const handleFlipPrev = useCallback(() => {
     if (bookRef.current) {
+      setFlipDirection('previous');
       setIsFlipping(true);
       setViewMode('spread');
       // في العربي: الرجوع معناه flipPrev (من اليمين لليسار)
@@ -295,14 +356,16 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
   }, []);
 
   const handleAdvanceArrow = useCallback(() => {
-    if (viewMode === 'left') {
-      // انتقل لليمين
-      setViewMode('right');
-    } else if (viewMode === 'right') {
-      // قلب الصفحة
+    if (currentIndex === 0) {
       handleFlipNext();
+      return;
     }
-  }, [viewMode, handleFlipNext]);
+    if (viewMode === 'left') {
+      setViewMode('right');
+      return;
+    }
+    if (viewMode === 'right') handleFlipNext();
+  }, [currentIndex, viewMode, handleFlipNext]);
 
   /* =========================
      Flip Events
@@ -373,26 +436,26 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
 
   useEffect(() => {
     if (!book || !pages.length) return;
-    const page = pages[currentIndex];
+    const page = activePage;
     if (!page) return;
 
     saveReadingProgress({
       bookId,
       bookTitle: book.title,
       chapterId: page.chapterId,
-      page: currentIndex + 1,
+      page: page.pageNumber,
     });
-  }, [book, bookId, currentIndex, pages]);
+  }, [activePage, book, bookId, pages.length]);
 
   const handleSavePage = async () => {
     const token = getToken();
-    const page = pages[currentIndex];
+    const page = activePage;
     if (!token) {
       setFavoriteError(isArabic ? 'سجّل الدخول لحفظ الصفحة في المفضلة.' : 'Sign in to save this page.');
       return;
     }
     if (!page?.chapterId) return;
-    const pageNumber = currentIndex + 1;
+    const pageNumber = page.pageNumber;
     const favorited = favoritePages.includes(pageNumber);
     setFavoriteBusy(true);
     setFavoriteError('');
@@ -408,7 +471,11 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
     }
   };
 
-  const progress = Math.round(((currentIndex + 1) / totalPages) * 100);
+  const progress = totalPages === 0
+    ? 0
+    : currentIndex === 0
+      ? 0
+      : Math.round(((activePage?.pageNumber ?? totalPages) / totalPages) * 100);
 
   if (!book && !loadError) {
     return <main className="grid min-h-screen place-items-center bg-[#14181d] text-sm text-[#f5ebd7]">{isArabic ? 'جارٍ تحميل الكتاب...' : 'Loading book...'}</main>;
@@ -471,7 +538,7 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
                 onClick={handleFlipNext}
                 className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-[#f8e8c7] transition hover:border-[#d6b26b]/60 hover:bg-[#d6b26b]/10 disabled:cursor-not-allowed disabled:opacity-30"
                 aria-label={isArabic ? 'الصفحة التالية' : 'Next page'}
-                disabled={currentIndex >= totalPages - 1}
+                disabled={!canFlipNext}
               >
                 ›
               </button>
@@ -502,11 +569,12 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
                 minHeight={400}
                 maxHeight={600}
                 maxShadowOpacity={0.5}
-                showCover={false}
+                showCover={true}
                 mobileScrollSupport={true}
-                key={`${book.id}:${pages.length}:${startPage}`}
+                key={`${book.id}:${totalFlipPages}:${startPage}`}
                 ref={bookRef}
                 className="demo-book"
+                style={{ '--page-stack-depth': `${pageStackDepth}px` } as React.CSSProperties}
                 usePortrait={true}
                 startPage={startPage}
                 drawShadow={true}
@@ -514,34 +582,29 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
                 onFlip={handleFlip}
                 onChangeState={handleChangeState}
               >
+                <CoverPage key={`${book.id}-front-cover`} book={book} />
                 {pages.map((page) => (
                   <BookPage
                     key={page.id}
                     page={page}
                     isArabic={isArabic}
-                    isBlurred={viewMode !== 'spread' && page.pageNumber !== currentIndex + (viewMode === 'right' ? 2 : 1)}
+                    isBlurred={viewMode !== 'spread' && page.pageNumber !== currentIndex + (viewMode === 'right' ? 1 : 0)}
                   />
                 ))}
+                {pages.length % 2 === 1 && <BlankPage key={`${book.id}-back-cover-spacer`} />}
+                <CoverPage key={`${book.id}-back-cover`} book={book} isBackCover />
               </HTMLFlipBook>
             </div>
 
             {/* السهم للانتقال بين الجنبين */}
-            {!isFlipping && viewMode !== 'spread' && currentIndex < totalPages - 1 && (
+            {!isFlipping && viewMode !== 'spread' && canFlipNext && (
               <button
                 type="button"
                 onClick={handleAdvanceArrow}
                 className="absolute bottom-10 left-1/2 z-30 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-[#d6b26b]/60 bg-[#1d1712]/85 text-3xl text-[#f3d9a3] shadow-[0_18px_36px_rgba(0,0,0,0.35)] transition hover:scale-105"
-                aria-label={
-                  viewMode === 'left'
-                    ? isArabic
-                      ? 'الانتقال للجنب الأيمن'
-                      : 'Move to right side'
-                    : isArabic
-                      ? 'الصفحة التالية'
-                      : 'Next page'
-                }
+                aria-label={isArabic ? 'الصفحة التالية' : 'Next page'}
               >
-                {viewMode === 'left' ? '→' : '⮕'}
+                →
               </button>
             )}
 
@@ -549,18 +612,18 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
               <button
                 type="button"
                 onClick={handleSavePage}
-                disabled={favoriteBusy}
+                disabled={favoriteBusy || !activePage}
                 className={`flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-sm transition ${
-                  favoritePages.includes(currentIndex + 1)
+                  activePage && favoritePages.includes(activePage.pageNumber)
                     ? 'border-[#d6b26b] bg-[#d6b26b]/20 text-[#f4d79a]'
                     : 'border-white/10 bg-black/40 text-white hover:bg-black/60'
                 }`}
-                aria-pressed={favoritePages.includes(currentIndex + 1)}
-                aria-label={favoritePages.includes(currentIndex + 1)
+                aria-pressed={activePage ? favoritePages.includes(activePage.pageNumber) : false}
+                aria-label={activePage && favoritePages.includes(activePage.pageNumber)
                   ? isArabic ? 'إزالة الصفحة من المفضلة' : 'Remove page from favorites'
                   : isArabic ? 'حفظ الصفحة في المفضلة' : 'Save page to favorites'}
               >
-                <Bookmark size={22} fill={favoritePages.includes(currentIndex + 1) ? 'currentColor' : 'none'} />
+                <Bookmark size={22} fill={activePage && favoritePages.includes(activePage.pageNumber) ? 'currentColor' : 'none'} />
               </button>
 
               <button
@@ -578,10 +641,13 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
           <div>
             <div className="relative">
               <ReaderControls
-                currentIndex={currentIndex}
+                currentIndex={controlsIndex}
                 totalPages={totalPages}
                 onPrevious={handleFlipPrev}
                 onNext={handleFlipNext}
+                canPrevious={currentIndex > 0}
+                canNext={canFlipNext}
+                isCover={currentIndex === 0}
                 locale={locale}
               />
             </div>
