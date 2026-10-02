@@ -133,6 +133,47 @@ export async function getMyPosts(token: string): Promise<Post[]> {
   return data.posts;
 }
 
+export async function getUserPosts(token: string | null, username: string): Promise<Post[]> {
+  const authToken = token ?? localStorage.getItem('niblan_token');
+  const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+
+  const tryJsonFetch = async (url: string): Promise<Post[]> => {
+    const response = await fetch(`${API_BASE}${url}`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers,
+    });
+    if (!response.ok) throw new Error('Not found');
+    const payload = await response.json();
+    const posts = payload.posts ?? payload.items ?? payload.data ?? [];
+    return Array.isArray(posts) ? posts : [];
+  };
+
+  const fallback = async (): Promise<Post[]> => {
+    if (!authToken) {
+      return [];
+    }
+    const feed = await getFeed(authToken);
+    return feed.filter((post) => post.author?.username === username || post.author?.display_name === username);
+  };
+
+  try {
+    const posts = await tryJsonFetch(`/posts?username=${encodeURIComponent(username)}`);
+    if (posts.length > 0) return posts;
+  } catch {
+    // fallback to username-specific route below
+  }
+
+  try {
+    const posts = await tryJsonFetch(`/posts/user/${encodeURIComponent(username)}`);
+    if (posts.length > 0) return posts;
+  } catch {
+    // fallback to feed filter below
+  }
+
+  return fallback();
+}
+
 export async function getFeed(token: string, limit = 20, offset = 0): Promise<Post[]> {
   const data = await request<{ posts: Post[] }>(`/posts/feed?limit=${limit}&offset=${offset}`, token, { method: 'GET' });
   return data.posts;

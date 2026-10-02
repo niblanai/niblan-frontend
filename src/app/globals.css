@@ -38,6 +38,266 @@ a {
   overflow: visible;
 }
 
+.reader-page {
+  min-height: 100svh;
+  color-scheme: light;
+  color: #29231a;
+  background: #f0e7d3;
+  transition: background-color 500ms ease;
+}
+
+.reader-layout {
+  min-height: 100svh;
+}
+
+.reader-stage {
+  position: relative;
+  isolation: isolate;
+  height: min(76svh, 860px);
+  min-height: 540px;
+  overflow: hidden;
+  background-color: #cfb786;
+  transition: background 500ms ease;
+}
+
+.reader-stage::before {
+  position: absolute;
+  z-index: 0;
+  inset-inline: 0;
+  bottom: 0;
+  height: 18%;
+  background-image:
+    repeating-linear-gradient(3deg, transparent 0 18px, rgba(66, 42, 20, 0.09) 19px 20px, transparent 21px 34px),
+    linear-gradient(180deg, rgba(255, 239, 198, 0.22), rgba(111, 71, 34, 0.13));
+  box-shadow: 0 -14px 30px rgba(67, 45, 23, 0.08);
+  content: '';
+  pointer-events: none;
+}
+
+.reader-theme-picker,
+.reader-header,
+.reader-progress {
+  position: relative;
+  z-index: 1;
+}
+
+.reader-scene {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+}
+
+.reading-room-canvas,
+.reading-room-canvas canvas {
+  position: absolute !important;
+  inset: 0;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.reading-room-canvas {
+  z-index: 1;
+}
+
+.reader-night-sky {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reader-stage:fullscreen {
+  width: 100%;
+  height: 100svh;
+  max-width: none;
+  min-height: 100svh;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  background: #f0e7d3;
+}
+
+.reader-stage--morning {
+  background-color: #d8c18f;
+  background-image: radial-gradient(ellipse at 18% 10%, rgba(255, 248, 217, 0.78), transparent 45%), linear-gradient(120deg, #ddc897, #c6a96f 70%, #b89661);
+}
+
+.reader-stage--evening {
+  background-color: #8d6147;
+  background-image: radial-gradient(ellipse at 78% 12%, rgba(255, 213, 154, 0.66), transparent 38%), linear-gradient(125deg, #b77f57, #78604d 58%, #55453d);
+}
+
+.reader-stage--night-window {
+  background-color: #443f3c;
+  background-image: radial-gradient(ellipse at 78% 20%, rgba(255, 223, 157, 0.19), transparent 38%), linear-gradient(135deg, #5c5147, #383534 70%, #49392e);
+}
+
+.reader-stage--cafe {
+  background-color: #77725e;
+  background-image: radial-gradient(ellipse at 16% 18%, rgba(255, 239, 191, 0.38), transparent 34%), linear-gradient(110deg, #8b8064, #666956 56%, #524b3c);
+}
+
+.reader-stage--home {
+  background-color: #d3c8ad;
+  background-image: radial-gradient(ellipse at 82% 15%, rgba(255, 249, 225, 0.74), transparent 42%), linear-gradient(125deg, #ded3b9, #c5b99e 68%, #b8a98c);
+}
+
+.reader-stage--fireplace {
+  background-color: #60493d;
+  background-image: radial-gradient(ellipse at 16% 72%, rgba(239, 139, 55, 0.32), transparent 33%), linear-gradient(120deg, #6e5140, #463a34 65%, #382f2a);
+}
+
+.reader-page--read-mode .reader-layout {
+  max-width: none;
+  padding-top: 10px;
+  padding-bottom: 12px;
+}
+
+.reader-page--read-mode .reader-stage {
+  height: min(88svh, 1040px);
+  min-height: 600px;
+}
+
+.reader-candle {
+  display: grid;
+  width: 42px;
+  height: 96px;
+  align-content: end;
+  justify-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.reader-candle__glow {
+  position: absolute;
+  top: -10px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 203, 109, 0.27), rgba(255, 184, 76, 0.08) 38%, transparent 70%);
+  opacity: 0;
+  transition: opacity 400ms ease;
+  pointer-events: none;
+}
+
+.reader-candle__glow.is-lit {
+  opacity: 1;
+  animation: candle-glow 2.8s ease-in-out infinite alternate;
+}
+
+.reader-candle__body {
+  position: relative;
+  z-index: 2;
+  width: 25px;
+  height: 58px;
+  border: 1px solid rgba(118, 89, 48, 0.3);
+  border-radius: 5px 5px 3px 3px;
+  background: linear-gradient(90deg, #cbb98f, #fff1d1 28%, #e5d4ad 70%, #b8a77f);
+  box-shadow: inset 2px 0 3px rgba(255, 255, 255, 0.6), 0 4px 8px rgba(45, 31, 18, 0.2);
+}
+
+.reader-candle__body::before {
+  position: absolute;
+  top: -3px;
+  left: -1px;
+  width: 25px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f4e6c5;
+  content: '';
+}
+
+.reader-candle__base {
+  z-index: 2;
+  width: 38px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #80623b, #d2b477 40%, #79603e);
+  box-shadow: 0 4px 7px rgba(43, 30, 18, 0.25);
+}
+
+.reader-candle__wick {
+  position: absolute;
+  z-index: 3;
+  bottom: 58px;
+  width: 2px;
+  height: 10px;
+  border-radius: 2px;
+  background: #564233;
+}
+
+.reader-candle__flame {
+  position: absolute;
+  z-index: 4;
+  bottom: 68px;
+  width: 13px;
+  height: 23px;
+  border-radius: 55% 45% 50% 50% / 65% 65% 35% 35%;
+  background: linear-gradient(180deg, #fff5bd 0%, #ffc65b 48%, #ed7836 100%);
+  opacity: 0;
+  transform: rotate(var(--flame-tilt, 0deg)) scale(0.2);
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 0 7px rgba(255, 174, 69, 0.65));
+  transition: opacity 250ms ease, transform 250ms ease;
+}
+
+.reader-candle__flame.is-lit {
+  opacity: 1;
+  transform: rotate(var(--flame-tilt, 0deg)) scale(1);
+  animation: candle-flame 1.5s ease-in-out infinite alternate;
+}
+
+.reader-candle__smoke {
+  position: absolute;
+  z-index: 4;
+  bottom: 71px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(91, 79, 64, 0.35);
+  border-radius: 50%;
+  opacity: 0;
+  transform: translateY(4px) scale(0.4);
+  pointer-events: none;
+}
+
+.reader-candle__smoke.is-visible {
+  animation: candle-smoke 1.8s ease-out 1 forwards;
+}
+
+@keyframes candle-flame {
+  from { margin-left: -1px; scale: 0.94 1.02; }
+  to { margin-left: 1px; scale: 1.04 0.96; }
+}
+
+@keyframes candle-glow {
+  from { opacity: 0.72; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1.06); }
+}
+
+@keyframes candle-smoke {
+  0% { opacity: 0; transform: translateY(4px) scale(0.4); }
+  20% { opacity: 0.55; }
+  100% { opacity: 0; transform: translate(7px, -40px) scale(2.2); }
+}
+
+@media (max-width: 640px) {
+  .reader-stage { height: 70svh; min-height: 500px; }
+  .reader-candle { transform: scale(0.78); transform-origin: bottom right; }
+  .reader-page--read-mode .reader-stage { height: 82svh; min-height: 540px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-candle__flame.is-lit,
+  .reader-candle__glow.is-lit { animation: none; }
+}
+
 .page-stack {
   transform-style: preserve-3d;
 }

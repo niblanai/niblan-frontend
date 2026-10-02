@@ -138,7 +138,7 @@ export default function Header({ locale }: HeaderProps) {
             </span>
           </button>
 
-          <Link href={`/${locale}/profile`} className="flex items-center gap-1 shrink-0">
+          <Link href={user?.username ? `/${locale}/profile/${encodeURIComponent(user.username)}` : `/${locale}/profile`} className="flex items-center gap-1 shrink-0">
             <span className="w-9 h-9 rounded-full bg-[#E8DFCB] overflow-hidden border border-[#E8DFCB] block">
               {user?.avatar_url ? (
                 <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />

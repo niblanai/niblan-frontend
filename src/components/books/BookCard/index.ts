@@ -1,1 +1,1 @@
-export {};
+export { BookCard } from './BookCard';export {};

@@ -3,13 +3,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import Image from 'next/image';
-import { ReaderControls } from './ReaderControls';
-import { Bookmark } from 'lucide-react';
+import { Bookmark, BookOpen, Maximize2, Minimize2 } from 'lucide-react';
 import DOMPurify from 'isomorphic-dompurify';
 import Link from 'next/link';
 import { getToken } from '@/services/auth.service';
 import { Book, getFavoritePageNumbers, getPublicBook, setFavoritePage } from '@/services/books.service';
 import { saveReadingProgress } from '@/services/reading-progress.service';
+import { ReadingRoomScene, type ReadingTheme } from './ReadingRoomScene';
 
 type ReaderPage = {
   id: string;
@@ -228,19 +228,59 @@ type BookFlipEvent = {
   data?: number | string | null;
 };
 
+const READING_THEMES = [
+  { id: 'morning', ar: 'صباح هادئ', en: 'Morning' },
+  { id: 'evening', ar: 'مساء ذهبي', en: 'Golden evening' },
+  { id: 'night-window', ar: 'نافذة ليلية', en: 'Night window' },
+  { id: 'cafe', ar: 'مقهى', en: 'Cafe' },
+  { id: 'home', ar: 'المنزل', en: 'Home' },
+  { id: 'fireplace', ar: 'بجوار المدفأة', en: 'Fireplace' },
+] as const;
+
+function ReadingCandle({ isArabic }: { isArabic: boolean }) {
+  const [isLit, setIsLit] = useState(true);
+  const [flameTilt, setFlameTilt] = useState(0);
+
+  return (
+    <button
+      type="button"
+      aria-label={isArabic ? (isLit ? 'إطفاء الشمعة' : 'إشعال الشمعة') : (isLit ? 'Extinguish candle' : 'Light candle')}
+      aria-pressed={isLit}
+      title={isArabic ? 'اضغط لإشعال أو إطفاء الشمعة' : 'Click to light or extinguish the candle'}
+      onClick={() => setIsLit((lit) => !lit)}
+      onPointerMove={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        setFlameTilt(Math.max(-12, Math.min(12, ((event.clientX - bounds.left) / bounds.width - 0.5) * 24)));
+      }}
+      onPointerLeave={() => setFlameTilt(0)}
+      style={{ '--flame-tilt': `${flameTilt}deg` } as React.CSSProperties}
+      className="reader-candle absolute bottom-[8%] end-[4%] z-20"
+    >
+      <span className={`reader-candle__glow ${isLit ? 'is-lit' : ''}`} />
+      <span className={`reader-candle__smoke ${isLit ? '' : 'is-visible'}`} />
+      <span className={`reader-candle__flame ${isLit ? 'is-lit' : ''}`} />
+      <span className="reader-candle__wick" />
+      <span className="reader-candle__body" />
+      <span className="reader-candle__base" />
+    </button>
+  );
+}
+
 export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId: string }) {
   const isArabic = locale === 'ar';
 
   const bookRef = useRef<BookFlipRef | null>(null);
-  const fullscreenRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fullscreenRef = useRef<HTMLElement>(null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [startPage, setStartPage] = useState(0);
   const [book, setBook] = useState<Book | null>(null);
   const [pages, setPages] = useState<ReaderPage[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [isReadMode, setIsReadMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [readingTheme, setReadingTheme] = useState<ReadingTheme>('morning');
   const [favoritePages, setFavoritePages] = useState<number[]>([]);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [favoriteError, setFavoriteError] = useState('');
@@ -254,8 +294,6 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
   const totalFlipPages = totalPages + 2 + (totalPages % 2);
   const lastFlipPageIndex = totalFlipPages - 1;
   const activePage = pages[currentIndex - 1];
-  const controlsIndex = currentIndex === 0 ? -1 : Math.min(currentIndex - 1, totalPages - 1);
-  const canFlipNext = currentIndex < lastFlipPageIndex;
   const stackPageIndex = isFlipping
     ? flipDirection === 'next'
       ? Math.min(lastFlipPageIndex, currentIndex === 0 ? currentIndex + 1 : currentIndex + 2)
@@ -296,38 +334,22 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
   ========================= */
   const zoomTransform = useMemo(() => {
     if (isFlipping) {
-      // أثناء التقليب: zoom out
-      return {
-        scale: 0.85,
-        translateX: 0,
-      };
+      return { scale: 0.85, translateX: 0 };
     }
 
     if (currentIndex === 0) {
-      return {
-        scale: 1.15,
-        translateX: -180,
-      };
+      return { scale: 1.15, translateX: -180 };
     }
 
     if (viewMode === 'left') {
-      return {
-        scale: 1.15,
-        translateX: 180,
-      };
+      return { scale: 1.15, translateX: 180 };
     }
 
     if (viewMode === 'right') {
-      return {
-        scale: 1.15,
-        translateX: -180,
-      };
+      return { scale: 1.15, translateX: -180 };
     }
 
-    return {
-      scale: 1,
-      translateX: 0,
-    };
+    return { scale: 1, translateX: 0 };
   }, [currentIndex, isFlipping, viewMode]);
 
   /* =========================
@@ -355,17 +377,20 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
     }
   }, []);
 
-  const handleAdvanceArrow = useCallback(() => {
-    if (currentIndex === 0) {
-      handleFlipNext();
-      return;
+  const toggleFullscreen = async () => {
+    if (!fullscreenRef.current) return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await fullscreenRef.current.requestFullscreen();
     }
-    if (viewMode === 'left') {
-      setViewMode('right');
-      return;
-    }
-    if (viewMode === 'right') handleFlipNext();
-  }, [currentIndex, viewMode, handleFlipNext]);
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(document.fullscreenElement === fullscreenRef.current);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   /* =========================
      Flip Events
@@ -387,30 +412,18 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
     setViewMode('left');
   }, []);
 
-  /* =========================
-     Fullscreen
-  ========================= */
-  const handleFullscreen = async () => {
-    if (!fullscreenRef.current) return;
-
-    if (!document.fullscreenElement) {
-      await fullscreenRef.current.requestFullscreen();
-    } else {
-      await document.exitFullscreen();
-    }
-  };
-
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+    const handleReaderKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowRight') handleFlipNext();
+      if (event.key === 'ArrowLeft') handleFlipPrev();
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('keydown', handleReaderKeyDown);
 
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleReaderKeyDown);
     };
-  }, []);
+  }, [handleFlipNext, handleFlipPrev]);
 
   /* =========================
      Saved Page
@@ -478,12 +491,12 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
       : Math.round(((activePage?.pageNumber ?? totalPages) / totalPages) * 100);
 
   if (!book && !loadError) {
-    return <main className="grid min-h-screen place-items-center bg-[#14181d] text-sm text-[#f5ebd7]">{isArabic ? 'جارٍ تحميل الكتاب...' : 'Loading book...'}</main>;
+    return <main className="reader-page grid min-h-screen place-items-center text-sm">{isArabic ? 'جارٍ تحميل الكتاب...' : 'Loading book...'}</main>;
   }
 
   if (loadError || !book) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#14181d] px-6 text-center text-[#f5ebd7]" dir={isArabic ? 'rtl' : 'ltr'}>
+      <main className="reader-page grid min-h-screen place-items-center px-6 text-center" dir={isArabic ? 'rtl' : 'ltr'}>
         <div>
           <h1 className="text-2xl font-semibold">{isArabic ? 'الكتاب غير متاح' : 'Book unavailable'}</h1>
           <Link href={`/${locale}/books`} className="mt-5 inline-flex border-b border-[#d6b26b] pb-1 text-sm text-[#f4d79a]">
@@ -496,78 +509,69 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
 
   return (
     <main
-      className="min-h-screen bg-[#14181d] px-4 py-6 text-[#f5ebd7] sm:px-6 lg:px-8"
+      className={`reader-page min-h-screen ${isReadMode ? 'reader-page--read-mode' : ''}`}
       dir={isArabic ? 'rtl' : 'ltr'}
     >
-      <div className="mx-auto max-w-[1500px]">
-        <div className="mb-6 text-center">
-          <p className="text-[10px] uppercase tracking-[0.35em] text-[#d2b57e] opacity-80 sm:text-xs">
-            {isArabic ? 'قراءة مميزة' : 'Premium reader'}
-          </p>
-
-          <h1 className="mt-3 text-2xl font-semibold text-[#f7f0e1] sm:text-4xl">
-            {book.title}
-          </h1>
-          <p className="mt-2 text-xs text-[#d9c8a7]">{book.author_display_name}</p>
-          {book.category_name && <p className="mt-1 text-xs text-[#d6b26b]">{book.category_name}</p>}
-        </div>
-
-        <div className="mx-auto max-w-[1380px] rounded-[28px] border border-white/10 bg-[#1a1d24]/90 p-4 shadow-[0_30px_60px_rgba(0,0,0,0.5)] backdrop-blur-sm sm:p-6">
-          <div className="sticky top-16 z-50 mb-5 flex items-center justify-between gap-4 border-b border-white/10 bg-[#1a1d24]/95 py-2 text-xs text-[#e9d9b8] backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d3ab62]/60 bg-[#2b2118] text-sm text-[#f4d79a]">
-                {isArabic ? 'ب' : 'B'}
-              </span>
-
-              <span className="font-medium">{isArabic ? 'نِبلان' : 'NIBLAN'}</span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleFlipPrev}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-[#f8e8c7] transition hover:border-[#d6b26b]/60 hover:bg-[#d6b26b]/10 disabled:cursor-not-allowed disabled:opacity-30"
-                aria-label={isArabic ? 'الصفحة السابقة' : 'Previous page'}
-                disabled={currentIndex === 0}
-              >
-                ‹
-              </button>
-
-              <button
-                type="button"
-                onClick={handleFlipNext}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-[#f8e8c7] transition hover:border-[#d6b26b]/60 hover:bg-[#d6b26b]/10 disabled:cursor-not-allowed disabled:opacity-30"
-                aria-label={isArabic ? 'الصفحة التالية' : 'Next page'}
-                disabled={!canFlipNext}
-              >
-                ›
-              </button>
-            </div>
+      <div className="reader-layout mx-auto w-full max-w-[1800px] px-3 py-4 sm:px-6 sm:py-6">
+        <header className="reader-header mb-3 flex flex-wrap items-center justify-between gap-4 sm:mb-5">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#947331] sm:text-xs">
+              {isArabic ? 'مساحة القراءة' : 'READING ROOM'}
+            </p>
+            <h1 className="mt-1 truncate text-xl font-semibold text-[#29231a] sm:text-2xl">{book.title}</h1>
+            {!isReadMode && <p className="mt-1 text-xs text-[#766a55]">{book.author_display_name}{book.category_name ? ` · ${book.category_name}` : ''}</p>}
           </div>
-
-          <div
-            ref={fullscreenRef}
-            className={`book-reader-surface relative flex h-[700px] w-full items-center justify-center !overflow-hidden rounded-[18px] border border-white/10 bg-[#14181d] ${
-              isFullscreen ? 'bg-[#14181d]' : ''
-            }`}
+          <button
+            type="button"
+            onClick={() => setIsReadMode((value) => !value)}
+            aria-pressed={isReadMode}
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 border border-[#a9843f]/50 bg-white/70 px-4 text-xs font-semibold tracking-[0.12em] text-[#5e4824] transition hover:bg-[#f3e4c1]"
           >
+            <BookOpen size={16} aria-hidden="true" />
+            {isReadMode ? 'EXIT READ MODE' : 'READ MODE'}
+          </button>
+        </header>
+
+        {!isReadMode && (
+          <nav className="reader-theme-picker mb-3 flex items-center gap-2 overflow-x-auto pb-2" aria-label={isArabic ? 'أجواء القراءة' : 'Reading atmosphere'}>
+            {READING_THEMES.map((theme) => (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => setReadingTheme(theme.id)}
+                aria-pressed={readingTheme === theme.id}
+                className={`shrink-0 border px-3 py-2 text-xs transition-colors ${readingTheme === theme.id ? 'border-[#8a6b27] bg-[#8a6b27] text-white' : 'border-[#b9a982]/70 bg-white/50 text-[#554a35] hover:bg-white/80'}`}
+              >
+                {isArabic ? theme.ar : theme.en}
+              </button>
+            ))}
+          </nav>
+        )}
+
+        <section ref={fullscreenRef} className={`reader-stage reader-stage--${readingTheme}`} aria-label={isArabic ? 'قارئ الكتاب' : 'Book reader'}>
+          <div className={`reader-scene reader-scene--${readingTheme}`} aria-hidden="true">
+            {readingTheme === 'night-window' && <img src="/images/night%20sky.svg" alt="" className="reader-night-sky" />}
+            <ReadingRoomScene theme={readingTheme} />
+          </div>
+          <div className="book-reader-surface relative z-10 flex h-full w-full items-center justify-center">
             <div
               ref={containerRef}
               className="relative flex h-full w-full items-center justify-center transition-all duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
-                transform: `translateX(${zoomTransform.translateX}px) scale(${zoomTransform.scale})`,
+                transform: `translateX(${zoomTransform.translateX}px) scale(${zoomTransform.scale}) rotateY(-4deg) rotateX(1deg)`,
                 transformOrigin: 'center center',
+                transformStyle: 'preserve-3d',
               }}
             >
               {/* @ts-expect-error react-pageflip supports this ref at runtime, but omits it from its declaration. */}
               <HTMLFlipBook
-                width={460}
-                height={600}
+                width={500}
+                height={650}
                 size="stretch"
-                minWidth={300}
-                maxWidth={500}
+                minWidth={280}
+                maxWidth={560}
                 minHeight={400}
-                maxHeight={600}
+                maxHeight={720}
                 maxShadowOpacity={0.5}
                 showCover={true}
                 mobileScrollSupport={true}
@@ -595,77 +599,45 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
                 <CoverPage key={`${book.id}-back-cover`} book={book} isBackCover />
               </HTMLFlipBook>
             </div>
-
-            {/* السهم للانتقال بين الجنبين */}
-            {!isFlipping && viewMode !== 'spread' && canFlipNext && (
-              <button
-                type="button"
-                onClick={handleAdvanceArrow}
-                className="absolute bottom-10 left-1/2 z-30 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-[#d6b26b]/60 bg-[#1d1712]/85 text-3xl text-[#f3d9a3] shadow-[0_18px_36px_rgba(0,0,0,0.35)] transition hover:scale-105"
-                aria-label={isArabic ? 'الصفحة التالية' : 'Next page'}
-              >
-                →
-              </button>
-            )}
-
-            <div className="absolute bottom-4 left-4 z-40 flex flex-col gap-2">
+            <ReadingCandle isArabic={isArabic} />
+            <div className="absolute bottom-5 start-5 z-30 flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleSavePage}
                 disabled={favoriteBusy || !activePage}
-                className={`flex h-10 w-10 items-center justify-center rounded-full border backdrop-blur-sm transition ${
+                className={`grid h-10 w-10 place-items-center border transition ${
                   activePage && favoritePages.includes(activePage.pageNumber)
-                    ? 'border-[#d6b26b] bg-[#d6b26b]/20 text-[#f4d79a]'
-                    : 'border-white/10 bg-black/40 text-white hover:bg-black/60'
+                    ? 'border-[#d6b26b] bg-[#d6b26b]/25 text-[#684b17]'
+                    : 'border-[#8a6b27]/40 bg-[#fffaf0]/80 text-[#5e4824] hover:bg-white'
                 }`}
                 aria-pressed={activePage ? favoritePages.includes(activePage.pageNumber) : false}
                 aria-label={activePage && favoritePages.includes(activePage.pageNumber)
                   ? isArabic ? 'إزالة الصفحة من المفضلة' : 'Remove page from favorites'
                   : isArabic ? 'حفظ الصفحة في المفضلة' : 'Save page to favorites'}
               >
-                <Bookmark size={22} fill={activePage && favoritePages.includes(activePage.pageNumber) ? 'currentColor' : 'none'} />
+                <Bookmark size={20} fill={activePage && favoritePages.includes(activePage.pageNumber) ? 'currentColor' : 'none'} />
               </button>
-
               <button
                 type="button"
-                onClick={handleFullscreen}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/40 text-lg text-white backdrop-blur-sm transition hover:bg-black/60"
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                onClick={toggleFullscreen}
+                className="grid h-10 w-10 place-items-center border border-[#8a6b27]/40 bg-[#fffaf0]/80 text-[#5e4824] transition hover:bg-white"
+                aria-label={isFullscreen ? (isArabic ? 'الخروج من ملء الشاشة' : 'Exit fullscreen') : (isArabic ? 'ملء الشاشة' : 'Fullscreen')}
+                title={isFullscreen ? (isArabic ? 'الخروج من ملء الشاشة' : 'Exit fullscreen') : (isArabic ? 'ملء الشاشة' : 'Fullscreen')}
               >
-                ⛶
+                {isFullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
               </button>
             </div>
-            {favoriteError && <p role="alert" className="absolute bottom-4 right-4 z-40 max-w-[70%] bg-[#141a22]/95 px-3 py-2 text-xs text-[#f4d79a]">{favoriteError}</p>}
+            {favoriteError && <p role="alert" className="absolute bottom-5 start-28 z-30 max-w-[65%] border border-[#a9843f]/30 bg-[#fffaf0]/95 px-3 py-2 text-xs text-[#684b17]">{favoriteError}</p>}
           </div>
+        </section>
 
-          <div>
-            <div className="relative">
-              <ReaderControls
-                currentIndex={controlsIndex}
-                totalPages={totalPages}
-                onPrevious={handleFlipPrev}
-                onNext={handleFlipNext}
-                canPrevious={currentIndex > 0}
-                canNext={canFlipNext}
-                isCover={currentIndex === 0}
-                locale={locale}
-              />
-            </div>
-
-            <div className="mt-3 px-4">
-              <div className="mb-2 flex items-center justify-between text-xs text-[#e9d9b8]">
-                <span>{isArabic ? 'تقدم القراءة' : 'Reading progress'}</span>
-
-                <span>{progress}%</span>
-              </div>
-
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-[#d6b26b] transition-all duration-500"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
+        <div className="reader-progress mx-auto mt-4 w-full max-w-[1400px] px-2 sm:mt-5 sm:px-4">
+          <div className="mb-2 flex items-center justify-between text-xs text-[#5e513d]">
+            <span>{isArabic ? 'تقدم القراءة' : 'Reading progress'}</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-[#6f5b3c]/20" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={isArabic ? 'تقدم القراءة' : 'Reading progress'}>
+            <div className="h-full rounded-full bg-[#a9843f] transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
         </div>
       </div>

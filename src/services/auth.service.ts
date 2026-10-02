@@ -64,6 +64,8 @@ export interface UserProfile {
   follower_count?: number;
   following_count?: number;
   achievement_count?: number;
+  is_following?: boolean;
+  is_followed_by?: boolean;
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
@@ -113,6 +115,23 @@ export async function getCurrentUser(token: string): Promise<UserProfile> {
       Authorization: `Bearer ${token}`,
     },
   });
+}
+
+export async function getUserProfileByUsername(username: string, token?: string): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE}/users/profile/${encodeURIComponent(username)}`, {
+    method: 'GET',
+    cache: 'no-store',
+    ...(token
+      ? { headers: { Authorization: `Bearer ${token}` } }
+      : {}),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error || response.statusText || 'User not found');
+  }
+
+  return (payload.user ?? payload.profile ?? payload) as UserProfile;
 }
 
 export async function requestPasswordReset(email: string): Promise<{ token?: string; message?: string }> {
