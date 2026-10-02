@@ -23,6 +23,13 @@ export interface ProfileUpdatePayload {
   qualifications?: Qualification[];
 }
 
+export interface ProfileFollowUser {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url?: string | null;
+}
+
 async function uploadImage(token: string, endpoint: 'avatar' | 'cover', file: File): Promise<UserProfile> {
   const formData = new FormData();
   formData.append('file', file);
@@ -76,4 +83,59 @@ export async function updateProfile(token: string, data: ProfileUpdatePayload): 
   }
 
   return payload as UserProfile;
+}
+
+export async function toggleFollow(token: string, targetUserId: string, follow: boolean): Promise<{ following: boolean; follower_count?: number; following_count?: number }> {
+  const response = await fetch(`${API_BASE}/users/profile/${encodeURIComponent(targetUserId)}/follow`, {
+    method: follow ? 'POST' : 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error || response.statusText || 'Follow action failed');
+  }
+
+  return {
+    following: Boolean(payload?.following ?? payload?.followed ?? follow),
+    follower_count: payload?.follower_count,
+    following_count: payload?.following_count,
+  };
+}
+
+export async function getProfileFollowList(
+  username: string,
+  relationship: 'followers' | 'following',
+  token?: string,
+): Promise<ProfileFollowUser[]> {
+  const response = await fetch(`${API_BASE}/users/profile/${encodeURIComponent(username)}/${relationship}`, {
+    method: 'GET',
+    cache: 'no-store',
+    ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error || response.statusText || 'Follow list failed');
+  }
+
+  return payload.users ?? [];
+}
+
+export async function getUserByUsername(username: string, token?: string): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE}/users/profile/${encodeURIComponent(username)}`, {
+    method: 'GET',
+    cache: 'no-store',
+    ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error || response.statusText || 'User lookup failed');
+  }
+
+  return (payload.user ?? payload.profile ?? payload) as UserProfile;
 }

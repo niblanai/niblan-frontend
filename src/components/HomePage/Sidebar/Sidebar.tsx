@@ -105,7 +105,9 @@ export default function Sidebar({ locale }: SidebarProps) {
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
-              href={`/${locale}${item.href ? `/${item.href}` : ''}`}
+              href={item.href === 'profile' && user?.username
+                ? `/${locale}/profile/${encodeURIComponent(user.username)}`
+                : `/${locale}${item.href ? `/${item.href}` : ''}`}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${
                 item.active ? 'bg-[#C69A3E] text-[#15130D] font-semibold' : 'text-white/70 hover:bg-white/5 hover:text-white'
               }`}

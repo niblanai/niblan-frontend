@@ -84,6 +84,48 @@ export async function getPublicBooks(): Promise<Book[]> {
 	return payload.books ?? [];
 }
 
+export async function getUserBooks(token: string | null, user: { id?: string; username?: string; display_name?: string } | null): Promise<Book[]> {
+	if (!user) return [];
+
+	const candidates: string[] = [];
+	if (user.id) candidates.push(`${API_BASE}/books?author_account_id=${encodeURIComponent(user.id)}`);
+	if (user.username) candidates.push(`${API_BASE}/users/${encodeURIComponent(user.username)}/books`);
+	if (user.id) candidates.push(`${API_BASE}/users/${encodeURIComponent(user.id)}/books`);
+	candidates.push(`${API_BASE}/books`);
+
+	const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+	for (const url of candidates) {
+		try {
+			const response = await fetch(url, {
+				cache: 'no-store',
+				headers,
+			});
+			if (!response.ok) continue;
+			const payload = await response.json();
+			const books = payload.books ?? payload.items ?? payload.data ?? [];
+			if (Array.isArray(books) && books.length > 0) {
+				if (user.id) {
+					return books.filter((book: Book) => book.author_account_id === user.id);
+				}
+				return books;
+			}
+		} catch {
+			continue;
+		}
+	}
+
+	const publicBooks = await getPublicBooks();
+	if (!user.id && !user.display_name && user.username) {
+		return publicBooks.filter((book) => book.author_display_name === user.username || book.author_display_name === user.username.replace(/_+/g, ' '));
+	}
+	return publicBooks.filter((book) => {
+		if (user.id && book.author_account_id === user.id) return true;
+		if (user.username && (book.author_display_name === user.username || book.author_display_name === user.username.replace(/_+/g, ' '))) return true;
+		return false;
+	});
+}
+
 export async function getPublicBook(id: string): Promise<Book> {
 	const response = await fetch(`${API_BASE}/books/${encodeURIComponent(id)}`, { cache: 'no-store' });
 	return readResponse<Book>(response);

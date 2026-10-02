@@ -104,7 +104,7 @@ export default function CommentList({ postId, currentAccountId, onCommentAdded }
           placeholder="اكتب تعليق..."
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
-          className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl py-2 px-3 text-sm text-white placeholder-slate-500 outline-none focus:border-[#f43f5e]/50 transition-colors"
+          className="flex-1 bg-white border border-[#E8DFCB] rounded-xl py-2 px-3 text-sm text-[#15130D] placeholder:text-[#8A8172] outline-none focus:border-[#C69A3E] transition-colors"
         />
         <button
           type="submit"

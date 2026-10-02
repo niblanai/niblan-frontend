@@ -1,12 +1,19 @@
+'use client';
+
 import React, { useState, useRef, useEffect } from 'react';
-import { getCurrentUser, type UserProfile } from '../../services/auth.service';
-import { uploadAvatar, uploadCover, updateProfile, type ProfileUpdatePayload } from '../../services/users.service';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { getCurrentUser, getUserProfileByUsername, type UserProfile } from '../../services/auth.service';
+import { getProfileFollowList, uploadAvatar, uploadCover, updateProfile, type ProfileFollowUser, type ProfileUpdatePayload, toggleFollow } from '../../services/users.service';
 import PostList from '../posts/PostList';
 import CreatePostModal from '../posts/CreatePostModal';
-import { getMyPosts, type Post } from '../../services/posts.service';
+import { getMyPosts, getUserPosts, type Post } from '../../services/posts.service';
+import { getUserBooks, type Book } from '../../services/books.service';
+import { BookCard, BookDetail } from '../books';
 
 // ==================== TYPES ====================
 type ProfileTab = 'posts' | 'books' | 'articles' | 'audio' | 'podcast' | 'edits';
+type FollowListType = 'followers' | 'following';
 
 interface WorkItem {
   id: number;
@@ -22,8 +29,8 @@ interface WorkItem {
 }
 
 // ==================== DATA ====================
-// These tabs still carry placeholder content (books/articles/audio/...) — only
-// the "المنشورات" tab is backed by the real posts module.
+// Articles, audio, podcast and edits still use placeholder content; posts and
+// books are loaded from their respective services.
 const tabs: { id: ProfileTab; label: string; icon: React.ReactNode }[] = [
   {
     id: 'posts',
@@ -55,14 +62,6 @@ const tabs: { id: ProfileTab; label: string; icon: React.ReactNode }[] = [
     label: 'تعديلات',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>,
   },
-];
-
-// Placeholder content for non-posts tabs — not part of today's scope.
-const books: WorkItem[] = [
-  { id: 1, title: 'فن التفكير الواضح', description: 'دليل عملي لتحسين التفكير النقدي واتخاذ القرارات', cover: '📕', category: 'تطوير ذاتي', date: '2024', reads: 12400 },
-  { id: 2, title: 'خريطة العقل', description: 'كيف يعمل الدماغ وكيف تستغل قدراته الكاملة', cover: '🧠', category: 'علوم', date: '2023', reads: 8900 },
-  { id: 3, title: 'رحلة الألف ميل', description: 'قصص واقعية عن الأشخاص الذين غيّروا حياتهم', cover: '🗺️', category: 'إلهام', date: '2023', reads: 15200 },
-  { id: 4, title: 'لغة الأرقام', description: 'فهم الإحصاءات والبيانات في حياتنا اليومية', cover: '📊', category: 'علوم', date: '2022', reads: 6700 },
 ];
 
 const articles: WorkItem[] = [
@@ -131,90 +130,220 @@ function countryLabel(code?: string | null) {
 
 // ==================== MAIN ====================
 export default function ProfileHeader() {
+  const router = useRouter();
+  const params = useParams() as { locale?: string; id?: string | string[]; username?: string | string[] } | undefined;
+  const routeParam = params?.username ?? params?.id;
+  const routeUsername = Array.isArray(routeParam) ? routeParam[0] : routeParam;
+
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followSubmitting, setFollowSubmitting] = useState(false);
+  const [followListType, setFollowListType] = useState<FollowListType | null>(null);
+  const [followListUsers, setFollowListUsers] = useState<ProfileFollowUser[]>([]);
+  const [followListLoading, setFollowListLoading] = useState(false);
+  const [followListError, setFollowListError] = useState<string | null>(null);
   const [avatarHover, setAvatarHover] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  // ---- Real user data from the database (via /api/v1/users/me) ----
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [viewerAccountId, setViewerAccountId] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const token = localStorage.getItem('niblan_token');
-    if (!token) {
-      setProfileLoading(false);
-      setProfileError('لا يوجد تسجيل دخول');
-      return;
-    }
+  const isOwnProfile = !routeUsername || (!!user && viewerAccountId === user.id);
 
+  const openFollowList = async (type: FollowListType) => {
+    if (!user?.username) return;
+    setFollowListType(type);
+    setFollowListUsers([]);
+    setFollowListError(null);
+    setFollowListLoading(true);
+    try {
+      const token = localStorage.getItem('niblan_token') ?? undefined;
+      const users = await getProfileFollowList(user.username, type, token);
+      setFollowListUsers(users);
+    } catch (err) {
+      setFollowListError(err instanceof Error ? err.message : 'تعذر تحميل القائمة');
+    } finally {
+      setFollowListLoading(false);
+    }
+  };
+
+  useEffect(() => {
     let cancelled = false;
-    setProfileLoading(true);
-    getCurrentUser(token)
-      .then((data) => {
-        if (!cancelled) {
-          setUser(data);
-          setProfileError(null);
+    const token = localStorage.getItem('niblan_token');
+    setViewerAccountId(null);
+
+    const loadProfile = async () => {
+      setProfileLoading(true);
+      setProfileError(null);
+
+      try {
+        if (!routeUsername) {
+          if (!token) {
+            if (!cancelled) {
+              setUser(null);
+              setProfileError('لا يوجد تسجيل دخول');
+            }
+            return;
+          }
+
+          const me = await getCurrentUser(token);
+          if (!cancelled) {
+            setViewerAccountId(me.id);
+            setUser(me);
+            setIsFollowing(Boolean(me.is_following));
+          }
+          return;
         }
-      })
-      .catch((err) => {
+
+        if (token) {
+          const me = await getCurrentUser(token);
+          if (!cancelled) {
+            setViewerAccountId(me.id);
+            if (me.username === routeUsername || me.id === routeUsername) {
+              setUser(me);
+              setIsFollowing(Boolean(me.is_following));
+              return;
+            }
+          }
+        }
+
+        const target = await getUserProfileByUsername(routeUsername, token ?? undefined);
+        if (!cancelled) {
+          setUser(target);
+          setIsFollowing(Boolean(target.is_following));
+        }
+      } catch (err) {
         if (!cancelled) {
           setProfileError(err instanceof Error ? err.message : 'تعذر تحميل بيانات الملف الشخصي');
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setProfileLoading(false);
-      });
+      }
+    };
 
+    loadProfile();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [routeUsername]);
 
-  // ---- منشورات (real data from the posts module) ----
-  const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [profilePosts, setProfilePosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
   const [postsError, setPostsError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('niblan_token');
-    if (!token) {
+    if (!user) {
+      setProfilePosts([]);
       setPostsLoading(false);
       return;
     }
 
     let cancelled = false;
+    const token = localStorage.getItem('niblan_token');
     setPostsLoading(true);
-    getMyPosts(token)
-      .then((data) => {
+    const fetchPosts = async () => {
+      try {
+        const posts = routeUsername
+          ? await getUserPosts(token, user.username)
+          : await getMyPosts(token ?? '');
+
         if (!cancelled) {
-          setMyPosts(data);
+          setProfilePosts(posts);
           setPostsError(null);
         }
-      })
-      .catch((err) => {
-        if (!cancelled) setPostsError(err instanceof Error ? err.message : 'تعذر تحميل المنشورات');
-      })
-      .finally(() => {
+      } catch (err) {
+        if (!cancelled) {
+          setPostsError(err instanceof Error ? err.message : 'تعذر تحميل المنشورات');
+          setProfilePosts([]);
+        }
+      } finally {
         if (!cancelled) setPostsLoading(false);
-      });
+      }
+    };
 
+    fetchPosts();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [routeUsername, user?.id, user?.username]);
 
-  const handlePostCreated = (post: Post) => setMyPosts((prev) => [post, ...prev]);
-  const handlePostUpdated = (updated: Post) => setMyPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-  const handlePostDeleted = (id: string) => setMyPosts((prev) => prev.filter((p) => p.id !== id));
+  const [profileBooks, setProfileBooks] = useState<Book[]>([]);
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [booksLoading, setBooksLoading] = useState(false);
+  const [booksError, setBooksError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setProfileBooks([]);
+      return;
+    }
+
+    let cancelled = false;
+    const token = localStorage.getItem('niblan_token');
+    setBooksLoading(true);
+    setBooksError(null);
+
+    getUserBooks(token, user)
+      .then((books) => {
+        if (!cancelled) {
+          setProfileBooks(books);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setBooksError(err instanceof Error ? err.message : 'تعذر تحميل الكتب');
+          setProfileBooks([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBooksLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [user?.id, user?.username, user?.display_name]);
+
+  const handlePostCreated = (post: Post) => setProfilePosts((prev) => [post, ...prev]);
+  const handlePostUpdated = (updated: Post) => setProfilePosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  const handlePostDeleted = (id: string) => setProfilePosts((prev) => prev.filter((p) => p.id !== id));
+
+  const handleFollowToggle = async () => {
+    if (!user?.id) return;
+    const token = localStorage.getItem('niblan_token');
+
+    if (!token) {
+      router.push('/ar/auth/login');
+      return;
+    }
+
+    setFollowSubmitting(true);
+    try {
+      const result = await toggleFollow(token, user.username, !isFollowing);
+      setIsFollowing(Boolean(result.following));
+      setUser((prev) => (prev ? { ...prev, is_following: Boolean(result.following), follower_count: result.follower_count ?? prev.follower_count } : prev));
+    } finally {
+      setFollowSubmitting(false);
+    }
+  };
+
+  const handleChatOpen = () => {
+    const token = localStorage.getItem('niblan_token');
+    if (!token) {
+      router.push('/ar/auth/login');
+      return;
+    }
+    router.push(`/ar/messages?user=${encodeURIComponent(user?.username ?? '')}`);
+  };
 
   // ---- Create post modal (replaces the always-visible inline composer) ----
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  const handleAvatarClick = () => fileInputRef.current?.click();
+  const handleAvatarClick = () => {
+    if (isOwnProfile) fileInputRef.current?.click();
+  };
 
   const [avatarError, setAvatarError] = useState<string | null>(null);
 
@@ -222,6 +351,10 @@ export default function ProfileHeader() {
   const ALLOWED_AVATAR_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isOwnProfile) {
+      e.target.value = '';
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -256,6 +389,10 @@ export default function ProfileHeader() {
   const [coverError, setCoverError] = useState<string | null>(null);
 
   const handleCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isOwnProfile) {
+      e.target.value = '';
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -356,7 +493,8 @@ export default function ProfileHeader() {
 
   const getActiveData = (): { type: 'works'; items: WorkItem[] } => {
     switch (activeTab) {
-      case 'books': return { type: 'works', items: books };
+      case 'books':
+        return { type: 'works', items: [] };
       case 'articles': return { type: 'works', items: articles };
       case 'audio': return { type: 'works', items: audioItems };
       case 'podcast': return { type: 'works', items: podcastItems };
@@ -406,25 +544,29 @@ export default function ProfileHeader() {
           )}
 
           {/* Cover edit */}
-          <button
-            type="button"
-            onClick={() => coverInputRef.current?.click()}
-            disabled={isCoverUploading}
-            className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur-sm border border-[#E8DFCB] text-xs text-[#4A4436] hover:bg-white transition-all duration-200 disabled:opacity-60"
-          >
-            {isCoverUploading ? (
-              <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg>
-            )}
-            تغيير الغلاف
-          </button>
-          <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFileChange} />
-          {coverError && (
+          {isOwnProfile && (
+            <>
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                disabled={isCoverUploading}
+                className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 backdrop-blur-sm border border-[#E8DFCB] text-xs text-[#4A4436] hover:bg-white transition-all duration-200 disabled:opacity-60"
+              >
+                {isCoverUploading ? (
+                  <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg>
+                )}
+                تغيير الغلاف
+              </button>
+              <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFileChange} />
+              {coverError && (
             <p className="absolute top-14 left-4 text-xs text-[#C0392B] bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5">{coverError}</p>
+              )}
+            </>
           )}
         </div>
 
@@ -433,9 +575,9 @@ export default function ProfileHeader() {
           <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 sm:gap-6 -mt-16 sm:-mt-20">
 
             {/* Avatar */}
-            <div className="relative" onClick={handleAvatarClick}>
+            <div className={`relative ${isOwnProfile ? 'cursor-pointer' : ''}`} onClick={isOwnProfile ? handleAvatarClick : undefined}>
               <div
-                className={`w-32 h-32 sm:w-40 sm:h-40 rounded-2xl bg-[#F8F3E7] border-4 border-white shadow-sm flex items-center justify-center text-5xl sm:text-6xl cursor-pointer transition-all duration-300 ${avatarHover ? 'scale-105' : ''} ${isUploading ? 'animate-pulse' : ''}`}
+                className={`w-32 h-32 sm:w-40 sm:h-40 rounded-2xl bg-[#F8F3E7] border-4 border-white shadow-sm flex items-center justify-center text-5xl sm:text-6xl transition-all duration-300 ${isOwnProfile ? 'cursor-pointer' : ''} ${isOwnProfile && avatarHover ? 'scale-105' : ''} ${isUploading ? 'animate-pulse' : ''}`}
                 onMouseEnter={() => setAvatarHover(true)}
                 onMouseLeave={() => setAvatarHover(false)}
               >
@@ -451,14 +593,14 @@ export default function ProfileHeader() {
                 )}
               </div>
 
-              <div className={`absolute inset-0 rounded-2xl bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center gap-2 transition-opacity duration-300 cursor-pointer ${avatarHover || isUploading ? 'opacity-100' : 'opacity-0'}`}>
+              {isOwnProfile && <div className={`absolute inset-0 rounded-2xl bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center gap-2 transition-opacity duration-300 cursor-pointer ${avatarHover || isUploading ? 'opacity-100' : 'opacity-0'}`}>
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg>
                 <span className="text-xs text-white font-medium">{isUploading ? 'جاري الرفع...' : 'تغيير الصورة'}</span>
-              </div>
+              </div>}
             </div>
 
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-            {avatarError && <p className="text-xs text-[#C0392B] mt-2 text-center">{avatarError}</p>}
+            {isOwnProfile && <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />}
+            {isOwnProfile && avatarError && <p className="text-xs text-[#C0392B] mt-2 text-center">{avatarError}</p>}
 
             {/* Name + actions */}
             <div className="flex-1 text-center sm:text-right sm:pb-2 w-full">
@@ -468,22 +610,36 @@ export default function ProfileHeader() {
                   <p className="text-sm text-[#8A8172] mt-1" dir="ltr">@{user.username}</p>
                 </div>
                 <div className="flex items-center gap-2.5 justify-center sm:justify-end">
-                  <button
-                    onClick={() => setIsFollowing(!isFollowing)}
-                    className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 bg-[#C69A3E] hover:bg-[#B78D34] text-[#15130D]"
-                  >
-                    متابعة
-                  </button>
-                  <button className="w-10 h-10 rounded-xl bg-[#F8F3E7] border border-[#E8DFCB] flex items-center justify-center text-[#4A4436] hover:bg-[#EFE8D8] transition-all duration-200">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
-                  </button>
-                  <button
-                    onClick={openEditModal}
-                    className="w-10 h-10 rounded-xl bg-[#F8F3E7] border border-[#E8DFCB] flex items-center justify-center text-[#4A4436] hover:bg-[#EFE8D8] transition-all duration-200"
-                    title="تعديل البروفايل"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  </button>
+                  {!isOwnProfile && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleFollowToggle}
+                        disabled={followSubmitting}
+                        className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 bg-[#C69A3E] hover:bg-[#B78D34] text-[#15130D] disabled:opacity-60"
+                      >
+                        {followSubmitting ? '...' : isFollowing ? 'متابع' : 'متابعة'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleChatOpen}
+                        className="w-10 h-10 rounded-xl bg-[#F8F3E7] border border-[#E8DFCB] flex items-center justify-center text-[#4A4436] hover:bg-[#EFE8D8] transition-all duration-200"
+                        title="الدردشة"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
+                      </button>
+                    </>
+                  )}
+                  {isOwnProfile && (
+                    <button
+                      type="button"
+                      onClick={openEditModal}
+                      className="w-10 h-10 rounded-xl bg-[#F8F3E7] border border-[#E8DFCB] flex items-center justify-center text-[#4A4436] hover:bg-[#EFE8D8] transition-all duration-200"
+                      title="تعديل البروفايل"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -494,7 +650,7 @@ export default function ProfileHeader() {
             {user.bio || 'لا يوجد نبذة تعريفية بعد.'}
           </p>
 
-          {/* Join date (the only stat the DB actually stores today) */}
+          {/* Join date and social counts */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-6 pb-6 border-b border-[#E8DFCB]">
             {formatJoinDate(user.created_at) && (
               <div className="flex items-center gap-2">
@@ -502,6 +658,14 @@ export default function ProfileHeader() {
                 <span className="text-sm text-[#8A8172]">انضم في {formatJoinDate(user.created_at)}</span>
               </div>
             )}
+            <button type="button" onClick={() => openFollowList('followers')} className="flex items-center gap-2 text-sm text-[#4A4436] hover:text-[#B78D34] transition-colors">
+              <span className="font-semibold text-[#15130D]">{(user.follower_count ?? 0).toLocaleString('en-US')}</span>
+              <span>المتابعون</span>
+            </button>
+            <button type="button" onClick={() => openFollowList('following')} className="flex items-center gap-2 text-sm text-[#4A4436] hover:text-[#B78D34] transition-colors">
+              <span className="font-semibold text-[#15130D]">{(user.following_count ?? 0).toLocaleString('en-US')}</span>
+              <span>يتابع</span>
+            </button>
           </div>
 
           {/* User details grid */}
@@ -575,20 +739,23 @@ export default function ProfileHeader() {
         {/* ===== POSTS TAB ===== */}
         {activeTab === 'posts' && (
           <div className="space-y-5">
-            <button
-              onClick={() => setCreateModalOpen(true)}
-              className="w-full flex items-center gap-3 bg-white border border-[#E8DFCB] rounded-2xl px-5 py-4 text-right hover:border-[#C69A3E]/40 hover:bg-[#FBF7EC] transition-colors"
-            >
-              <span className="w-10 h-10 rounded-full bg-[#C69A3E]/10 flex items-center justify-center text-[#C69A3E] shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-[#15130D]">إنشاء منشور</p>
-                <p className="text-xs text-[#8A8172]">شارك أفكارك، مقالاتك، أو اقتباساتك...</p>
-              </div>
-            </button>
+            {isOwnProfile && (
+              <button
+                type="button"
+                onClick={() => setCreateModalOpen(true)}
+                className="w-full flex items-center gap-3 bg-white border border-[#E8DFCB] rounded-2xl px-5 py-4 text-right hover:border-[#C69A3E]/40 hover:bg-[#FBF7EC] transition-colors"
+              >
+                <span className="w-10 h-10 rounded-full bg-[#C69A3E]/10 flex items-center justify-center text-[#C69A3E] shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-[#15130D]">إنشاء منشور</p>
+                  <p className="text-xs text-[#8A8172]">شارك أفكارك، مقالاتك، أو اقتباساتك...</p>
+                </div>
+              </button>
+            )}
             <PostList
-              posts={myPosts}
+              posts={profilePosts}
               loading={postsLoading}
               error={postsError}
               currentAccountId={user.id}
@@ -598,8 +765,26 @@ export default function ProfileHeader() {
           </div>
         )}
 
-        {/* ===== WORKS TABS (Books, Articles, Audio, Podcast, Edits) ===== */}
-        {activeData.type === 'works' && (
+        {activeTab === 'books' && (
+          <div>
+            {booksLoading ? (
+              <p className="py-16 text-center text-sm text-[#8A8172]">جاري تحميل الكتب...</p>
+            ) : booksError ? (
+              <p role="alert" className="py-16 text-center text-sm text-[#C0392B]">{booksError}</p>
+            ) : profileBooks.length === 0 ? (
+              <p className="py-16 text-center text-sm text-[#8A8172]">لا توجد كتب منشورة بعد.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-x-5 gap-y-9 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {profileBooks.map((book) => (
+                  <BookCard key={book.id} book={book} locale={params?.locale ?? 'ar'} onSelect={setSelectedBook} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== WORKS TABS (Articles, Audio, Podcast, Edits) ===== */}
+        {activeTab !== 'books' && activeData.type === 'works' && (
           <div>
             {(activeTab === 'audio' || activeTab === 'podcast') ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -654,7 +839,7 @@ export default function ProfileHeader() {
                   <div key={item.id} className="group bg-white border border-[#E8DFCB] rounded-2xl overflow-hidden hover:bg-[#FBF7EC] hover:border-[#C69A3E]/30 transition-all duration-300 hover:-translate-y-1">
                     <div className="relative p-6 pb-4 flex justify-center bg-gradient-to-b from-[#FBF7EC] to-transparent">
                       <div className="group-hover:scale-105 transition-transform duration-500">
-                        <CoverPlaceholder emoji={item.cover} size={activeTab === 'books' ? 'lg' : 'md'} />
+                        <CoverPlaceholder emoji={item.cover} size="md" />
                       </div>
                       <span className="absolute top-4 right-4 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-md bg-[#F8F3E7] border border-[#E8DFCB] text-[#8A8172]">
                         {item.category}
@@ -685,6 +870,74 @@ export default function ProfileHeader() {
         )}
 
       </div>
+
+      {followListType && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onClick={() => setFollowListType(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-follow-list-title"
+            className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-2xl border border-[#E8DFCB] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-center justify-between border-b border-[#E8DFCB] px-5 py-4">
+              <h2 id="profile-follow-list-title" className="text-base font-semibold text-[#15130D]">
+                {followListType === 'followers' ? 'المتابعون' : 'يتابع'}
+              </h2>
+              <button type="button" onClick={() => setFollowListType(null)} aria-label="إغلاق" className="flex h-9 w-9 items-center justify-center rounded-lg text-[#6F6759] hover:bg-[#F8F3E7]">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </header>
+
+            <div className="grid grid-cols-2 border-b border-[#E8DFCB] p-2">
+              <button type="button" onClick={() => openFollowList('followers')} aria-pressed={followListType === 'followers'} className={`rounded-lg px-3 py-2 text-sm transition-colors ${followListType === 'followers' ? 'bg-[#F8F3E7] font-semibold text-[#15130D]' : 'text-[#6F6759] hover:bg-[#FBF7EC]'}`}>
+                المتابعون <span className="text-xs">{(user.follower_count ?? 0).toLocaleString('en-US')}</span>
+              </button>
+              <button type="button" onClick={() => openFollowList('following')} aria-pressed={followListType === 'following'} className={`rounded-lg px-3 py-2 text-sm transition-colors ${followListType === 'following' ? 'bg-[#F8F3E7] font-semibold text-[#15130D]' : 'text-[#6F6759] hover:bg-[#FBF7EC]'}`}>
+                يتابع <span className="text-xs">{(user.following_count ?? 0).toLocaleString('en-US')}</span>
+              </button>
+            </div>
+
+            <div className="max-h-[55vh] overflow-y-auto p-2">
+              {followListLoading ? (
+                <p className="px-4 py-10 text-center text-sm text-[#8A8172]">جاري تحميل القائمة...</p>
+              ) : followListError ? (
+                <p className="px-4 py-10 text-center text-sm text-[#C0392B]">{followListError}</p>
+              ) : followListUsers.length === 0 ? (
+                <p className="px-4 py-10 text-center text-sm text-[#8A8172]">لا يوجد مستخدمون في هذه القائمة.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {followListUsers.map((followUser) => (
+                    <li key={followUser.id}>
+                      <Link
+                        href={`/${params?.locale ?? 'ar'}/profile/${encodeURIComponent(followUser.username)}`}
+                        onClick={() => setFollowListType(null)}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-[#FBF7EC] transition-colors"
+                      >
+                        {followUser.avatar_url ? (
+                          <img src={followUser.avatar_url} alt="" className="h-11 w-11 rounded-full object-cover" />
+                        ) : (
+                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F0E7CE] font-semibold text-[#4A4436]">{getInitial(followUser.display_name)}</span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-[#15130D]">{followUser.display_name}</span>
+                          <span className="block truncate text-xs text-[#8A8172]" dir="ltr">@{followUser.username}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {selectedBook && <BookDetail book={selectedBook} locale={params?.locale ?? 'ar'} onClose={() => setSelectedBook(null)} />}
 
       {/* ===== CREATE POST MODAL ===== */}
       <CreatePostModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onCreated={handlePostCreated} />
