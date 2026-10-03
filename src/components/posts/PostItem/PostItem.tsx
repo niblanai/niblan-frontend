@@ -136,7 +136,7 @@ export default function PostItem({ post, currentAccountId, onUpdated, onDeleted 
         </span>
       </div>
 
-      {showComments && <CommentList postId={post.id} currentAccountId={currentAccountId} />}
+      {showComments && <CommentList postId={post.id} currentAccountId={currentAccountId} postOwnerAccountId={post.author?.account_id} />}
     </div>
   );
 }

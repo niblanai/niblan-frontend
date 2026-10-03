@@ -61,6 +61,7 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
+     * - api (API endpoints must not receive a locale prefix)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
@@ -70,6 +71,6 @@ export const config = {
      *   above never actually matched anything and these requests were
      *   being redirected to a non-existent /ar/images/... route)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)',
+    '/((?!api(?:/|$)|_next/static|_next/image|favicon.ico|.*\\..*).*)',
   ],
 };
