@@ -1,4 +1,5 @@
 import { resolveApiBase } from './api';
+import type { PaperTextureId } from '@/lib/books/paperTextures';
 
 const API_BASE = resolveApiBase();
 
@@ -17,9 +18,13 @@ export interface Book {
 	language: 'ar' | 'en';
 	category_id: string;
 	category_name: string;
+	paper_texture_id: PaperTextureId;
+	free_write: boolean;
 	chapters: BookChapter[];
 	author_account_id: string;
 	author_display_name: string;
+	view_count?: number;
+	average_rating?: number;
 	published_at: string;
 	created_at: string;
 }
@@ -67,19 +72,39 @@ export interface CreateBookInput {
 	cover_url: string;
 	language: 'ar' | 'en';
 	category_id: string;
+	paper_texture_id: PaperTextureId;
+	free_write: boolean;
 	chapters: BookChapter[];
 }
 
 async function readResponse<T>(response: Response): Promise<T> {
-	const payload = response.status === 204 ? undefined : await response.json();
+	if (response.status === 204) return undefined as T;
+
+	const responseText = await response.text();
+	let payload: { error?: string } | undefined;
+	if (responseText) {
+		try {
+			payload = JSON.parse(responseText) as { error?: string };
+		} catch {
+			const details = responseText.replace(/\s+/g, ' ').slice(0, 180);
+			throw new Error(
+				`Server returned an invalid response (HTTP ${response.status})${details ? `: ${details}` : '.'}`
+			);
+		}
+	}
 	if (!response.ok) {
-		throw new Error(payload?.error || response.statusText || 'Request failed');
+		throw new Error(payload?.error || response.statusText || `Request failed (HTTP ${response.status})`);
 	}
 	return payload as T;
 }
 
-export async function getPublicBooks(): Promise<Book[]> {
-	const response = await fetch(`${API_BASE}/books`, { cache: 'no-store' });
+export async function getPublicBooks(catalogueSlug?: string, perCategoryLimit?: number): Promise<Book[]> {
+	const params = new URLSearchParams();
+	if (catalogueSlug) params.set('catalogue', catalogueSlug);
+	if (perCategoryLimit) params.set('per_category_limit', String(perCategoryLimit));
+	const query = params.toString();
+	const endpoint = query ? `${API_BASE}/books?${query}` : `${API_BASE}/books`;
+	const response = await fetch(endpoint, { cache: 'no-store' });
 	const payload = await readResponse<{ books: Book[] }>(response);
 	return payload.books ?? [];
 }
@@ -149,7 +174,19 @@ export async function uploadBookCover(token: string, file: File): Promise<string
 	return payload.cover_url;
 }
 
-export async function createBook(token: string, input: CreateBookInput): Promise<Book> {
+export async function uploadBookPageImage(token: string, file: File): Promise<string> {
+	const formData = new FormData();
+	formData.append('file', file);
+	const response = await fetch(`${API_BASE}/books/cover`, {
+		method: 'POST',
+		headers: { Authorization: `Bearer ${token}` },
+		body: formData,
+	});
+	const payload = await readResponse<{ cover_url: string }>(response);
+	return payload.cover_url;
+}
+
+export async function createBook(token: string, input: CreateBookInput, locale = 'en'): Promise<Book> {
 	const response = await fetch(`${API_BASE}/books`, {
 		method: 'POST',
 		headers: {
@@ -158,7 +195,15 @@ export async function createBook(token: string, input: CreateBookInput): Promise
 		},
 		body: JSON.stringify(input),
 	});
-	return readResponse<Book>(response);
+	const book = await readResponse<Book>(response);
+	if (book.paper_texture_id !== input.paper_texture_id) {
+		throw new Error(
+			locale === 'ar'
+				? 'لم يؤكد الخادم حفظ ثيم الورق المختار. تحقق من تحديث قاعدة بيانات الكتب والـ backend.'
+				: 'The server did not confirm the selected paper theme was saved. Check the book database migration and backend deployment.'
+		);
+	}
+	return book;
 }
 
 export async function getBookBookmark(token: string, bookId: string): Promise<boolean> {

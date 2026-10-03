@@ -7,9 +7,19 @@
   font-family: Inter, system-ui, sans-serif;
 }
 
+.reader-stage--rain-video {
+  background-color: #242d3b;
+  background-image: url('/images/night%20sky.svg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
 html {
   scroll-behavior: smooth;
 }
+
+
 
 body {
   margin: 0;
@@ -36,6 +46,13 @@ a {
   touch-action: pan-y;
   perspective: 1600px;
   overflow: visible;
+}
+
+.book-rain-overlay {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  pointer-events: none;
 }
 
 .reader-page {
@@ -107,7 +124,32 @@ a {
   inset: 0;
   width: 100%;
   height: 100%;
+  background-color: #242d3b;
+  background-image: url('/images/night%20sky.svg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.reader-rain-video {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: #242d3b;
+  background-image: url('/images/night%20sky.svg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 350ms ease;
+}
+
+.reader-rain-video.is-playing {
+  opacity: 1;
 }
 
 .reader-stage:fullscreen {
@@ -271,6 +313,783 @@ a {
   animation: candle-smoke 1.8s ease-out 1 forwards;
 }
 
+.catalog-category-tab {
+  position: relative;
+  display: flex;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(235, 211, 178, 0.18);
+  border-radius: 999px;
+  padding: 0 13px;
+  color: #f2e6d6;
+  background: rgba(29, 20, 15, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, 0.08), 0 3px 10px rgba(5, 3, 2, 0.24);
+  backdrop-filter: blur(12px) saturate(125%);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-shadow: 0 1px 2px rgba(12, 6, 3, 0.4);
+  transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.catalog-category-tab::before {
+  position: absolute;
+  inset: 1px 18px auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 231, 184, 0.24), transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.catalog-category-tab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(243, 211, 158, 0.48);
+  background-color: rgba(57, 39, 28, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 232, 195, 0.15), 0 5px 14px rgba(10, 5, 2, 0.32);
+}
+
+.catalog-category-tab:focus-visible,
+.catalog-category-arrow:focus-visible {
+  outline: 2px solid #f3d79e;
+  outline-offset: 2px;
+}
+
+.catalog-category-tab.is-active {
+  border-color: rgba(236, 206, 160, 0.68);
+  color: #2a1a10;
+  background: linear-gradient(135deg, #e0c195, #b88c5a);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, 0.55), 0 4px 13px rgba(10, 5, 2, 0.32);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.catalog-category-tab__count {
+  flex: 0 0 auto;
+  border: 1px solid rgba(246, 224, 191, 0.14);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #f2e3ce;
+  background: rgba(9, 6, 4, 0.36);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.catalog-category-tab.is-active .catalog-category-tab__count {
+  border-color: rgba(64, 42, 24, 0.14);
+  color: #49321d;
+  background: rgba(255, 251, 239, 0.42);
+}
+
+.catalog-category-arrow {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(235, 211, 178, 0.2);
+  border-radius: 999px;
+  color: #f4e7d4;
+  background: rgba(29, 20, 15, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, 0.08), 0 3px 10px rgba(5, 3, 2, 0.24);
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, opacity 180ms ease;
+  backdrop-filter: blur(12px) saturate(125%);
+}
+
+.catalog-category-arrow:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(243, 211, 158, 0.5);
+  background-color: rgba(57, 39, 28, 0.9);
+}
+
+.catalog-category-arrow:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.catalog-nav-surface {
+  background: rgba(22, 15, 11, 0.84);
+  backdrop-filter: blur(18px) saturate(135%);
+}
+
+.catalog-search-shell {
+  border-color: rgba(235, 211, 178, 0.2);
+  color: #f2e6d6;
+  background: rgba(29, 20, 15, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, 0.08), 0 4px 13px rgba(5, 3, 2, 0.3);
+  backdrop-filter: blur(14px) saturate(135%);
+}
+
+.catalog-search-shell--open {
+  border-color: rgba(236, 206, 160, 0.58);
+  background: rgba(30, 21, 16, 0.97);
+}
+
+.catalog-search-shell:focus-within {
+  border-color: rgba(243, 211, 158, 0.72);
+  box-shadow: 0 0 0 2px rgba(225, 190, 139, 0.12), 0 5px 15px rgba(5, 3, 2, 0.32);
+}
+
+.catalog-scene-root {
+  background-color: #160b06;
+}
+
+.catalog-room-backdrop {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(17, 8, 4, 0.1), rgba(17, 8, 4, 0.2)),
+    url('/books-design/candlelit-library-room.webp') center center / cover no-repeat;
+  pointer-events: none;
+}
+
+.catalog-library-content {
+  width: min(1100px, calc(100% - 24px));
+  margin-inline: auto;
+  position: relative;
+}
+
+.catalog-library-content--3d {
+  display: block !important;
+  height: min(64vh, 660px);
+  min-height: 440px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (min-width: 1100px) {
+  #library-top {
+    min-height: calc(100vh - 52px);
+  }
+
+  .catalog-library-content {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 0;
+    position: absolute;
+    top: clamp(30px, 3.4vh, 42px);
+    right: 6vw;
+    width: min(48vw, 740px);
+    margin: 0;
+    background: transparent;
+  }
+
+  .catalog-library-content.catalog-library-content--3d {
+    display: block !important;
+    right: -14vw;
+    width: min(90vw, 1400px);
+    height: min(72vh, 760px);
+    min-height: 460px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .catalog-library-content .catalog-title-plank {
+    height: 24px !important;
+  }
+
+  .catalog-library-content .catalog-title-plank > div > span {
+    font-size: 14px !important;
+  }
+
+  .catalog-library-content .catalog-title-plank svg {
+    width: 28px;
+    height: 14px;
+  }
+
+  .catalog-library-content .catalog-bay {
+    aspect-ratio: auto;
+    height: clamp(118px, 12.2vh, 132px);
+    min-height: 0;
+    background-size: 100% 100%;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1099px) {
+  #library-top {
+    position: relative;
+    min-height: calc(100vh - 52px);
+  }
+
+  .catalog-library-content.catalog-library-content--3d {
+    position: absolute;
+    top: clamp(12px, 4vh, 36px);
+    right: -7vw;
+    left: auto;
+    width: min(84vw, 1120px);
+    height: min(70vh, 700px);
+    min-height: 390px;
+    margin: 0;
+  }
+}
+
+.catalog-zoom-backdrop {
+  border: 0;
+  background: rgba(8, 5, 3, 0.76);
+  backdrop-filter: blur(5px);
+  animation: catalog-zoom-fade-in 220ms ease-out both;
+}
+
+.catalog-library-content--zoomed {
+  position: fixed !important;
+  z-index: 60 !important;
+  top: 50% !important;
+  right: auto !important;
+  left: 50% !important;
+  bottom: auto !important;
+  width: min(96vw, 1180px) !important;
+  max-height: 88vh;
+  max-height: 88dvh;
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(210, 166, 112, 0.78);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(46, 27, 17, 0.99), rgba(29, 17, 11, 0.99));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 226, 184, 0.2);
+  animation: catalog-zoom-in 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.catalog-library-content--category-zoomed {
+  position: fixed !important;
+  z-index: 60 !important;
+  top: 50% !important;
+  right: auto !important;
+  left: 50% !important;
+  bottom: auto !important;
+  display: block !important;
+  width: min(96vw, 1180px) !important;
+  max-height: 88vh;
+  max-height: 88dvh;
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(139, 93, 56, 0.96);
+  background: linear-gradient(180deg, rgba(47, 29, 19, 0.99), rgba(27, 16, 10, 0.99));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(202, 158, 109, 0.22);
+  animation: catalog-zoom-in 360ms cubic-bezier(0.18, 0.72, 0.26, 1) both;
+}
+
+.catalog-library-content--3d.catalog-library-content--zoomed,
+.catalog-library-content--3d.catalog-library-content--category-zoomed {
+  display: block !important;
+  height: min(78vh, 860px);
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.catalog-library-content--category-zoomed .catalog-case:not(.is-zoomed-category) {
+  display: none;
+}
+
+.catalog-library-content--category-zoomed .catalog-case.is-zoomed-category {
+  display: block;
+  width: 100%;
+}
+
+.catalog-library-content--category-zoomed .catalog-title-plank {
+  height: 36px !important;
+}
+
+.catalog-library-content--category-zoomed .catalog-title-plank > div > span {
+  font-size: 18px !important;
+}
+
+.catalog-library-content--category-zoomed .catalog-bay {
+  aspect-ratio: auto;
+  height: clamp(170px, 22vh, 230px);
+  min-height: 0;
+  background-size: auto 100%;
+}
+
+.catalog-library-content--zoomed .catalog-title-plank {
+  height: 32px !important;
+}
+
+.catalog-library-content--zoomed .catalog-title-plank > div > span {
+  font-size: 17px !important;
+}
+
+.catalog-library-content--zoomed .catalog-bay {
+  height: clamp(150px, 18vh, 190px);
+  min-height: 0;
+  background-size: auto 100%;
+}
+
+.catalog-library-content--zoomed .catalog-frame-post,
+.catalog-library-content--category-zoomed .catalog-frame-post {
+  width: clamp(20px, 2.2vw, 32px);
+}
+
+.catalog-frame-post,
+.catalog-frame-base {
+  position: absolute;
+  z-index: 44;
+  background-image:
+    linear-gradient(90deg, rgba(7, 3, 1, 0.5), rgba(198, 145, 91, 0.1) 24%, transparent 44%, rgba(5, 2, 1, 0.48)),
+    url('/books-design/wood_table_001_diff_4k.jpg');
+  background-repeat: no-repeat, repeat-y;
+  background-position: center, center top;
+  background-size: 100% 100%, 320px 320px;
+  box-shadow: inset 1px 0 rgba(227, 179, 119, 0.24), inset -2px 0 4px rgba(6, 3, 1, 0.52), 2px 0 5px rgba(5, 2, 1, 0.42);
+  pointer-events: none;
+}
+
+.catalog-frame-post,
+.catalog-frame-base,
+.catalog-case-post,
+.catalog-front,
+.catalog-center-post {
+  filter: brightness(0.74) saturate(0.92);
+}
+
+.catalog-frame-post {
+  top: 0;
+  bottom: 20px;
+  width: clamp(12px, 1.45vw, 21px);
+}
+
+.catalog-frame-post--start {
+  left: 0;
+}
+
+.catalog-frame-post--end {
+  right: 0;
+}
+
+.catalog-frame-base {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 22px;
+  background-image:
+    linear-gradient(180deg, rgba(233, 184, 121, 0.24), rgba(13, 6, 2, 0.55)),
+    url('/books-design/wood_table_001_diff_4k.jpg');
+  background-repeat: no-repeat, repeat-x;
+  background-position: center, center;
+  background-size: 100% 100%, 320px 100%;
+  box-shadow: inset 0 1px rgba(239, 195, 139, 0.3), 0 7px 14px rgba(4, 2, 1, 0.52);
+  pointer-events: none;
+}
+
+.catalog-zoom-close {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  color: #f4e6d1;
+  background: rgba(24, 15, 10, 0.9);
+  border: 1px solid rgba(235, 211, 178, 0.34);
+  backdrop-filter: blur(10px);
+}
+
+.catalog-3d-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    transparent;
+}
+
+.catalog-3d-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.catalog-3d-scroll--active {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(198, 145, 91, 0.65) rgba(24, 15, 10, 0.35);
+  scrollbar-width: thin;
+}
+
+.catalog-3d-scroll--active .catalog-3d-stage {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.catalog-3d-scroll-spacer {
+  width: 1px;
+  pointer-events: none;
+}
+
+.catalog-3d-stage,
+.catalog-3d-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.catalog-3d-stage canvas {
+  outline: none;
+  cursor: default;
+}
+
+.catalog-3d-book-tooltip {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  width: max-content;
+  max-width: min(260px, calc(100% - 24px));
+  gap: 3px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(220, 184, 144, 0.48);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: #f4e8d5;
+  background: rgba(24, 14, 8, 0.94);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.48);
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.catalog-3d-book-tooltip-title {
+  overflow: hidden;
+  color: #f5d49e;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-3d-book-tooltip-author {
+  overflow: hidden;
+  color: rgba(244, 232, 213, 0.8);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-3d-book-tooltip-stats {
+  display: flex;
+  gap: 12px;
+  color: rgba(244, 232, 213, 0.72);
+  font-size: 10px;
+}
+
+.catalog-3d-loading,
+.catalog-3d-error {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 2;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(220, 184, 144, 0.28);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #f2e4d0;
+  background: rgba(24, 15, 10, 0.92);
+  font-size: 13px;
+  text-align: center;
+}
+
+.catalog-3d-catalogue-warning {
+  position: absolute;
+  top: 42px;
+  right: 10px;
+  z-index: 4;
+  max-width: min(320px, calc(100% - 20px));
+  border: 1px solid rgba(220, 184, 144, 0.32);
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: #f2e4d0;
+  background: rgba(24, 15, 10, 0.88);
+  font-size: 11px;
+  text-align: start;
+}
+
+.catalog-3d-category-title {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 2;
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
+  border: 1px solid rgba(220, 184, 144, 0.32);
+  border-radius: 3px;
+  padding: 4px 14px;
+  color: #ead2ad;
+  background: rgba(31, 19, 12, 0.88);
+  font-family: var(--font-catalog-amiri), serif;
+  font-size: 14px;
+  text-align: center;
+}
+
+@keyframes catalog-zoom-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes catalog-zoom-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.94); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-zoom-backdrop,
+  .catalog-library-content--zoomed {
+    animation: none;
+  }
+}
+
+.catalog-case {
+  overflow: hidden;
+  background: transparent;
+}
+
+.catalog-case-post {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  bottom: 0;
+  width: 2.4%;
+  background-image: url('/books-design/wood_table_001_diff_4k.jpg');
+  background-repeat: repeat-y;
+  background-position: center top;
+  background-size: 320px 320px;
+  box-shadow: inset 2px 0 3px rgba(255, 220, 170, 0.14), inset -4px 0 6px rgba(20, 8, 2, 0.6), 2px 0 5px rgba(10, 4, 1, 0.42);
+  pointer-events: none;
+}
+
+.catalog-case-post--start {
+  inset-inline-start: 0;
+}
+
+.catalog-case-post--end {
+  inset-inline-end: 0;
+  transform: scaleX(-1);
+}
+
+.catalog-title-plank {
+  background-image:
+    linear-gradient(180deg, rgba(224, 175, 116, 0.13), rgba(13, 7, 4, 0.28)),
+    url('/books-design/wood_table_001_diff_4k.jpg');
+  background-color: rgba(23, 10, 4, 0.24);
+  background-blend-mode: multiply;
+  background-position: center, center;
+  background-repeat: no-repeat, repeat-x;
+  background-size: 100% 100%, 320px 100%;
+}
+
+.catalog-row {
+  container-type: inline-size;
+  --bay-h: 17.0197cqw;
+}
+
+.catalog-front {
+  height: 1.3446cqw;
+  position: relative;
+  z-index: 20;
+  background-image:
+    linear-gradient(180deg, rgba(224, 175, 116, 0.18), rgba(13, 7, 4, 0.42)),
+    url('/books-design/wood_table_001_diff_4k.jpg');
+  background-repeat: no-repeat, repeat-x;
+  background-position: center, center;
+  background-size: 100% 100%, 320px 100%;
+  box-shadow: 0 5px 9px rgba(12, 5, 2, 0.4);
+}
+
+.catalog-center-post {
+  z-index: 30;
+  width: 1.7%;
+  background-image: url('/books-design/wood_table_001_diff_4k.jpg');
+  background-repeat: repeat-y;
+  background-position: center top;
+  background-size: 320px 320px;
+  box-shadow: inset 1px 0 2px rgba(255, 220, 170, 0.12), inset -3px 0 4px rgba(20, 8, 2, 0.52);
+  pointer-events: none;
+}
+
+.catalog-case-bottom {
+  height: 16px;
+  background: #1b0d07;
+  box-shadow: inset 0 2px 4px rgba(255, 219, 171, 0.12), 0 5px 12px rgba(10, 4, 1, 0.45);
+}
+
+.catalog-bay {
+  position: relative;
+  isolation: isolate;
+  aspect-ratio: 896 / 305;
+  container-type: size;
+  --bay-h: 100cqh;
+  min-height: 240px;
+  background-color: #815537;
+  background-blend-mode: multiply;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.catalog-bay::before {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+}
+
+.catalog-bay::before {
+  background: linear-gradient(180deg, rgba(255, 225, 174, 0.1) 0%, rgba(255, 220, 164, 0.035) 8%, transparent 24%);
+}
+
+.catalog-bay::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background: url('/books-design/wood_table_001_diff_4k.jpg') center / cover no-repeat;
+  content: '';
+  opacity: 0.2;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.catalog-books {
+  direction: ltr;
+}
+
+.catalog-book-item::before,
+.catalog-book-item::after {
+  position: absolute;
+  z-index: 0;
+  content: '';
+  pointer-events: none;
+}
+
+.catalog-book-item::before {
+  right: -12%;
+  bottom: -3cqh;
+  left: -12%;
+  height: 4cqh;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(10, 4, 1, 0.56), rgba(10, 4, 1, 0.18) 46%, transparent 76%);
+  filter: blur(3px);
+}
+
+.catalog-book-item::after {
+  top: auto;
+  right: -24%;
+  bottom: 4%;
+  width: 88%;
+  height: var(--catalog-shadow-height, 70%);
+  background: linear-gradient(90deg, rgba(9, 4, 2, 0.02), rgba(9, 4, 2, 0.31) 34%, rgba(9, 4, 2, 0.05));
+  filter: blur(11px);
+  opacity: 0.78;
+  transform: translate(var(--catalog-wall-shift, 9px), 5px);
+}
+
+.catalog-book-item[data-face-out='true']::after {
+  right: -34%;
+  width: 108%;
+  filter: blur(13px);
+  opacity: 0.88;
+  transform: translate(calc(var(--catalog-wall-shift, 15px) + 4px), 8px);
+}
+
+.catalog-faceout-gloss {
+  background: linear-gradient(132deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.035) 34%, transparent 68%);
+}
+
+.catalog-faceout-hinge {
+  background: linear-gradient(90deg, rgba(8, 4, 2, 0.6), rgba(255, 236, 191, 0.24) 38%, rgba(12, 5, 2, 0.18));
+  box-shadow: 1px 0 2px rgba(8, 3, 1, 0.46);
+}
+
+.catalog-spine-rim {
+  background: linear-gradient(180deg, rgba(255, 238, 199, 0.88), rgba(246, 207, 131, 0.36) 42%, rgba(52, 29, 11, 0.12));
+  box-shadow: 1px 0 1px rgba(255, 236, 193, 0.28);
+}
+
+.catalog-spine-band {
+  border-top: 1px solid rgba(255, 237, 190, 0.78);
+  border-bottom: 1px solid rgba(40, 20, 6, 0.72);
+  box-shadow: 0 1px 2px rgba(10, 4, 1, 0.52);
+  opacity: 0.92;
+}
+
+.catalog-spine-label-frame {
+  border: 1px solid;
+  box-shadow: inset 1px 1px rgba(255, 230, 173, 0.38), inset -1px -1px rgba(20, 9, 3, 0.64), 0 0 1px rgba(255, 229, 175, 0.56);
+}
+
+.catalog-spine-title-box {
+  text-shadow: 0 1px 1px rgba(17, 8, 3, 0.64);
+}
+
+.catalog-gold-title {
+  color: #e9ce8f;
+  background-image: linear-gradient(90deg, #9e7841 0%, #f7e5af 28%, #c59b57 52%, #fff1c5 74%, #9e7740 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 1px 1px rgba(19, 8, 2, 0.78);
+}
+
+.catalog-faceout-pages {
+  background-color: #e6dbc1;
+  background-image:
+    linear-gradient(90deg, rgba(61, 37, 15, 0.34), transparent 42%),
+    repeating-linear-gradient(180deg, rgba(112, 81, 41, 0.24) 0 1px, transparent 1px 3px),
+    url('/books-design/paper-edge.jpg');
+  background-blend-mode: multiply, multiply, soft-light;
+  box-shadow: inset 1px 0 rgba(255, 242, 205, 0.65), -1px 0 2px rgba(8, 3, 1, 0.5);
+}
+
+.catalog-shelf-accent {
+  min-height: 54px;
+  padding-inline: 8px 12px;
+}
+
+@media (min-width: 768px) {
+  .catalog-bay {
+    min-height: 0;
+    container-type: size;
+  }
+
+  .catalog-row > .grid > div .catalog-bay {
+    background-position: center bottom;
+    background-size: 116% 100%;
+  }
+}
+
+@media (min-width: 1100px) {
+  .catalog-library-content .catalog-row > .grid > div .catalog-bay {
+    background-size: auto 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-category-tab,
+  .catalog-category-arrow {
+    transition: none;
+  }
+
+  .catalog-book-item,
+  .catalog-book-item * {
+    transition-duration: 0ms !important;
+  }
+
+  .catalog-book-item:hover > .relative,
+  .catalog-book-item:focus-visible > .relative {
+    --fwd: 0px !important;
+    --lift: 0px !important;
+  }
+
+  .catalog-book-item:hover > .relative > div,
+  .catalog-book-item:focus-visible > .relative > div {
+    --ry: 0deg !important;
+  }
+}
+
 @keyframes candle-flame {
   from { margin-left: -1px; scale: 0.94 1.02; }
   to { margin-left: 1px; scale: 1.04 0.96; }
@@ -288,6 +1107,34 @@ a {
 }
 
 @media (max-width: 640px) {
+  .catalog-row {
+    --bay-h: max(240px, 34.0395cqw);
+  }
+
+  .catalog-bay {
+    aspect-ratio: auto;
+    min-height: 240px;
+  }
+
+  .catalog-front {
+    height: 18.96px;
+  }
+
+  .catalog-case-post {
+    width: 1.4%;
+  }
+
+  .catalog-books {
+    left: 8%;
+    right: 8%;
+    top: 25%;
+    bottom: 3%;
+  }
+
+  .catalog-shelf-decor {
+    gap: 4px;
+  }
+
   .reader-stage { height: 70svh; min-height: 500px; }
   .reader-candle { transform: scale(0.78); transform-origin: bottom right; }
   .reader-page--read-mode .reader-stage { height: 82svh; min-height: 540px; }
@@ -328,8 +1175,8 @@ a {
 }
 
 .page-texture {
-  background-image: url('../../old-paper-texture-3-2-624x468.jpg');
-  background-size: 200% auto;
+  background-image: url('/paper_texture/old-paper-texture-3-2-624x468.jpg');
+  background-size: 200% 100%;
 }
 
 .page-texture--left {
@@ -349,18 +1196,52 @@ a {
   isolation: isolate;
 }
 
-.book-cover-image {
-  top: -7px !important;
-  left: -7px !important;
-  width: calc(100% + var(--page-stack-depth, 0px) + 1px) !important;
-  height: calc(100% + 16px) !important;
-  max-width: none !important;
-  max-height: none !important;
+.book-content img,
+.book-editor .ProseMirror img {
+  display: block;
+  max-width: 65%;
+  height: auto;
+  object-fit: contain;
 }
 
-[dir='rtl'] .book-cover-image {
-  right: calc(0px - var(--page-stack-depth, 0px) + 7px) !important;
-  left: auto !important;
+.book-content,
+.book-editor .ProseMirror {
+  overflow-wrap: anywhere;
+}
+
+.book-content img[data-float='right'],
+.book-editor .ProseMirror img[data-float='right'],
+.book-content img:not([data-float]),
+.book-editor .ProseMirror img:not([data-float]) {
+  float: right !important;
+  margin: 0.25rem 0 0.75rem 1rem !important;
+}
+
+.book-content img[data-float='left'],
+.book-editor .ProseMirror img[data-float='left'] {
+  float: left !important;
+  margin: 0.25rem 1rem 0.75rem 0 !important;
+}
+
+.book-editor .ProseMirror img {
+  max-height: 190px;
+}
+
+.book-page-preview .book-content img {
+  max-height: 120px;
+}
+
+.book-reader-content img {
+  max-height: 225px;
+}
+
+.book-cover-image {
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
 }
 
 .book-back-cover-page {
@@ -370,16 +1251,17 @@ a {
 .demo-book::after {
   position: absolute;
   top: 3px;
-  right: calc(0px - var(--page-stack-depth));
+  right: calc(0px - var(--right-page-stack-depth, var(--page-stack-depth, 0px)));
   z-index: 0;
-  width: var(--page-stack-depth, 0px);
+  width: var(--right-page-stack-depth, var(--page-stack-depth, 0px));
   height: calc(100% - 6px);
+  opacity: var(--right-page-stack-opacity, 1);
   border: 1px solid rgba(128, 103, 63, 0.75);
   background-color: #efe1c4;
   background-image:
     repeating-linear-gradient(90deg, rgba(107, 82, 49, 0.36) 0 1px, transparent 1px 5px),
     linear-gradient(rgba(243, 234, 211, 0.72), rgba(243, 234, 211, 0.72)),
-    url('../../old-paper-texture-3-2-624x468.jpg');
+    url('/paper_texture/old-paper-texture-3-2-624x468.jpg');
   background-position: left top, center, right center;
   background-size: 5px 100%, 100% 100%, auto 100%;
   background-repeat: repeat, no-repeat, no-repeat;
@@ -388,6 +1270,29 @@ a {
   pointer-events: none;
   transform: none;
   transition: width 800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.demo-book::before {
+  position: absolute;
+  top: 3px;
+  left: calc(0px - var(--left-page-stack-depth, 0px));
+  z-index: 0;
+  width: var(--left-page-stack-depth, 0px);
+  height: calc(100% - 6px);
+  opacity: var(--left-page-stack-opacity, 0);
+  border: 1px solid rgba(128, 103, 63, 0.75);
+  background-color: #efe1c4;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(107, 82, 49, 0.36) 0 1px, transparent 1px 5px),
+    linear-gradient(rgba(243, 234, 211, 0.72), rgba(243, 234, 211, 0.72)),
+    url('/paper_texture/old-paper-texture-3-2-624x468.jpg');
+  background-position: left top, center, left center;
+  background-size: 5px 100%, 100% 100%, auto 100%;
+  background-repeat: repeat, no-repeat, no-repeat;
+  box-shadow: -5px 2px 8px rgba(0, 0, 0, 0.28);
+  content: '';
+  pointer-events: none;
+  transition: width 800ms cubic-bezier(0.22, 1, 0.36, 1), opacity 800ms ease;
 }
 
 .demo-book .stf__block {

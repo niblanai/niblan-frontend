@@ -3,13 +3,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import Image from 'next/image';
-import { Bookmark, BookOpen, Maximize2, Minimize2 } from 'lucide-react';
-import DOMPurify from 'isomorphic-dompurify';
+import { ArrowLeft, ArrowRight, Bookmark, BookOpen, Maximize2, Minimize2 } from 'lucide-react';
 import Link from 'next/link';
+import { getPaperTextureStyle } from '@/lib/books/paperTextures';
+import { paginateHtmlByTextLimit } from '@/lib/books/paginateHtml';
+import { sanitizeBookHtml } from '@/lib/books/sanitizeBookHtml';
 import { getToken } from '@/services/auth.service';
 import { Book, getFavoritePageNumbers, getPublicBook, setFavoritePage } from '@/services/books.service';
 import { saveReadingProgress } from '@/services/reading-progress.service';
 import { ReadingRoomScene, type ReadingTheme } from './ReadingRoomScene';
+import { BookRainOverlay } from './BookRainOverlay';
 
 type ReaderPage = {
   id: string;
@@ -19,88 +22,17 @@ type ReaderPage = {
   title: string;
   content: string;
   pageNumber: number;
+  paperTextureID: string;
 };
 
 const PAGE_TEXT_LIMIT = 600;
 
-function splitTextNode(node: Text, limit: number): Node[] {
-  const text = node.textContent ?? '';
-  if (text.length <= limit) return [document.createTextNode(text)];
-
-  const tokens = text.match(/\s+|[^\s]+/gu) ?? [text];
-  const chunks: string[] = [];
-  let current = '';
-
-  for (const token of tokens) {
-    if (token.length > limit) {
-      if (current) chunks.push(current);
-      current = '';
-      const characters = Array.from(token);
-      for (let offset = 0; offset < characters.length; offset += limit) {
-        chunks.push(characters.slice(offset, offset + limit).join(''));
-      }
-      continue;
-    }
-    if (current.length + token.length > limit) {
-      chunks.push(current);
-      current = '';
-    }
-    current += token;
-  }
-  if (current) chunks.push(current);
-  return chunks.map((chunk) => document.createTextNode(chunk));
-}
-
-function splitNode(node: Node, limit: number): Node[] {
-  if (node.nodeType === 3) return splitTextNode(node as Text, limit);
-  if (node.nodeType !== 1) return [node.cloneNode(true)];
-
-  const element = node as HTMLElement;
-  const chunks: HTMLElement[] = [];
-  let current = element.cloneNode(false) as HTMLElement;
-  let currentLength = 0;
-
-  for (const child of Array.from(element.childNodes)) {
-    for (const childChunk of splitNode(child, limit)) {
-      const childLength = childChunk.textContent?.length ?? 0;
-      if (current.childNodes.length > 0 && currentLength + childLength > limit) {
-        chunks.push(current);
-        current = element.cloneNode(false) as HTMLElement;
-        currentLength = 0;
-      }
-      current.appendChild(childChunk);
-      currentLength += childLength;
-    }
-  }
-  if (current.childNodes.length > 0 || chunks.length === 0) chunks.push(current);
-  return chunks;
-}
-
-function paginateChapterContent(content: string): string[] {
-  const sanitized = DOMPurify.sanitize(content);
-  const parsed = new DOMParser().parseFromString(sanitized, 'text/html');
-  const parts = Array.from(parsed.body.childNodes).flatMap((node) => splitNode(node, PAGE_TEXT_LIMIT));
-  const pages: string[] = [];
-  let currentParts: Node[] = [];
-  let currentLength = 0;
-
-  const flush = () => {
-    if (currentParts.length === 0) return;
-    const wrapper = document.createElement('div');
-    currentParts.forEach((part) => wrapper.appendChild(part));
-    pages.push(wrapper.innerHTML);
-    currentParts = [];
-    currentLength = 0;
-  };
-
-  for (const part of parts) {
-    const partLength = part.textContent?.length ?? 0;
-    if (currentParts.length > 0 && currentLength + partLength > PAGE_TEXT_LIMIT) flush();
-    currentParts.push(part);
-    currentLength += partLength;
-  }
-  flush();
-  return pages.length > 0 ? pages : [''];
+function paginateChapterContent(content: string, freeWrite: boolean): string[] {
+  const sanitized = sanitizeBookHtml(content);
+  const authoredPages = freeWrite
+    ? [sanitized]
+    : sanitized.split(/<hr\b(?=[^>]*\bdata-book-page-break(?:\s|=|\/|>))[^>]*\/?>/gi);
+  return authoredPages.flatMap((page) => paginateHtmlByTextLimit(page, PAGE_TEXT_LIMIT));
 }
 
 function paginateBook(book: Book, locale: string, bookId: string): ReaderPage[] {
@@ -108,7 +40,7 @@ function paginateBook(book: Book, locale: string, bookId: string): ReaderPage[] 
   const pages: ReaderPage[] = [];
 
   book.chapters.forEach((chapter, chapterIndex) => {
-    const chapterPages = paginateChapterContent(chapter.content);
+    const chapterPages = paginateChapterContent(chapter.content, book.free_write);
     chapterPages.forEach((content, pageIndex) => {
       pages.push({
         id: `${bookId}-${chapterIndex}-${pageIndex}`,
@@ -118,6 +50,7 @@ function paginateBook(book: Book, locale: string, bookId: string): ReaderPage[] 
         title: pageIndex === 0 ? chapter.title : '',
         content,
         pageNumber: pages.length + 1,
+        paperTextureID: book.paper_texture_id,
       });
     });
   });
@@ -150,7 +83,8 @@ const BookPage = React.forwardRef<
       className={`book-page relative h-full w-full overflow-hidden rounded-[5px] border border-[#b99562] bg-[#f3ead3] shadow-[0_75px_130px_rgba(0,0,0,0.45),0_35px_75px_rgba(0,0,0,0.25),inset_60px_20px_60px_-35px_rgba(10,10,0,0.2),inset_-60px_20px_60px_-35px_rgba(20,10,0,0.2)] select-none ${page.pageNumber === 1 ? 'book-page--cover-backed' : ''}`}
     >
       <div
-        className={`page-texture page-texture--${page.pageNumber % 2 === 1 ? 'right' : 'left'} pointer-events-none absolute inset-0 opacity-90`}
+        className={`page-texture page-texture--${page.pageNumber % 2 === 1 ? 'right' : 'left'} pointer-events-none absolute inset-0`}
+        style={getPaperTextureStyle(page.paperTextureID, page.pageNumber % 2 === 1 ? 'right' : 'left')}
       />
 
       <div className="relative z-10 flex h-full w-full flex-col p-5 sm:p-7">
@@ -166,8 +100,8 @@ const BookPage = React.forwardRef<
 
           {page.title && <h2 className="mb-4 text-right text-[26px] font-semibold leading-tight text-[#2a1f17]">{page.title}</h2>}
 
-          <div className="space-y-4 overflow-hidden text-right text-[13px] leading-7 text-[#2d231c]">
-            <div className="book-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content) }} />
+          <div className="space-y-4 text-right text-[13px] leading-7 text-[#2d231c]">
+            <div className="book-content book-reader-content" dangerouslySetInnerHTML={{ __html: sanitizeBookHtml(page.content) }} />
           </div>
         </div>
 
@@ -208,9 +142,9 @@ const CoverPage = React.forwardRef<HTMLDivElement, { book: Book; isBackCover?: b
 
 CoverPage.displayName = 'CoverPage';
 
-const BlankPage = React.forwardRef<HTMLDivElement>((_, ref) => (
+const BlankPage = React.forwardRef<HTMLDivElement, { paperTextureID: string }>(({ paperTextureID }, ref) => (
   <div ref={ref} className="book-page h-full w-full rounded-[5px] border border-[#b99562] bg-[#f3ead3]" aria-hidden="true">
-    <div className="page-texture page-texture--left h-full w-full opacity-90" />
+    <div className="page-texture page-texture--left h-full w-full" style={getPaperTextureStyle(paperTextureID, 'left')} />
   </div>
 ));
 
@@ -235,7 +169,10 @@ const READING_THEMES = [
   { id: 'cafe', ar: 'مقهى', en: 'Cafe' },
   { id: 'home', ar: 'المنزل', en: 'Home' },
   { id: 'fireplace', ar: 'بجوار المدفأة', en: 'Fireplace' },
+  { id: 'rain-video', ar: 'مطر هادئ', en: 'Quiet rain' },
 ] as const;
+
+type ReaderAtmosphere = ReadingTheme | 'rain-video';
 
 function ReadingCandle({ isArabic }: { isArabic: boolean }) {
   const [isLit, setIsLit] = useState(true);
@@ -280,7 +217,8 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
   const [loadError, setLoadError] = useState(false);
   const [isReadMode, setIsReadMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [readingTheme, setReadingTheme] = useState<ReadingTheme>('morning');
+  const [readingTheme, setReadingTheme] = useState<ReaderAtmosphere>('morning');
+  const [isRainVideoPlaying, setIsRainVideoPlaying] = useState(false);
   const [favoritePages, setFavoritePages] = useState<number[]>([]);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [favoriteError, setFavoriteError] = useState('');
@@ -300,8 +238,9 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
       : Math.max(0, currentIndex - 2)
     : currentIndex;
   const totalSheets = Math.ceil(totalPages / 2);
-  const consumedSheets = Math.floor(Math.max(0, stackPageIndex - 1) / 2);
-  const pageStackDepth = Math.max(0, totalSheets - consumedSheets) * 5;
+  const consumedSheets = Math.min(totalSheets, Math.floor(Math.max(0, stackPageIndex - 1) / 2));
+  const rightPageStackDepth = Math.max(0, totalSheets - consumedSheets) * 5;
+  const leftPageStackDepth = consumedSheets * 5;
 
   useEffect(() => {
     let active = true;
@@ -337,20 +276,20 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
       return { scale: 0.85, translateX: 0 };
     }
 
-    if (currentIndex === 0) {
-      return { scale: 1.15, translateX: -180 };
+    if (currentIndex === 0 || currentIndex === lastFlipPageIndex) {
+      return { scale: 1, translateX: 0 };
     }
 
     if (viewMode === 'left') {
-      return { scale: 1.15, translateX: 180 };
+      return { scale: 1.08, translateX: 145 };
     }
 
     if (viewMode === 'right') {
-      return { scale: 1.15, translateX: -180 };
+      return { scale: 1.08, translateX: -145 };
     }
 
     return { scale: 1, translateX: 0 };
-  }, [currentIndex, isFlipping, viewMode]);
+  }, [currentIndex, isFlipping, lastFlipPageIndex, viewMode]);
 
   /* =========================
      Navigation
@@ -538,7 +477,10 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
               <button
                 key={theme.id}
                 type="button"
-                onClick={() => setReadingTheme(theme.id)}
+                onClick={() => {
+                  if (theme.id === 'rain-video') setIsRainVideoPlaying(false);
+                  setReadingTheme(theme.id);
+                }}
                 aria-pressed={readingTheme === theme.id}
                 className={`shrink-0 border px-3 py-2 text-xs transition-colors ${readingTheme === theme.id ? 'border-[#8a6b27] bg-[#8a6b27] text-white' : 'border-[#b9a982]/70 bg-white/50 text-[#554a35] hover:bg-white/80'}`}
               >
@@ -550,8 +492,27 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
 
         <section ref={fullscreenRef} className={`reader-stage reader-stage--${readingTheme}`} aria-label={isArabic ? 'قارئ الكتاب' : 'Book reader'}>
           <div className={`reader-scene reader-scene--${readingTheme}`} aria-hidden="true">
-            {readingTheme === 'night-window' && <img src="/images/night%20sky.svg" alt="" className="reader-night-sky" />}
-            <ReadingRoomScene theme={readingTheme} />
+            {readingTheme === 'rain-video' ? (
+              <video
+                className={`reader-rain-video ${isRainVideoPlaying ? 'is-playing' : ''}`}
+                src="/videos/videoplayback.mp4"
+                poster="/images/night%20sky.svg"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="none"
+                onPlaying={() => setIsRainVideoPlaying(true)}
+                onWaiting={() => setIsRainVideoPlaying(false)}
+                onError={() => setIsRainVideoPlaying(false)}
+                aria-hidden="true"
+              />
+            ) : (
+              <>
+                {readingTheme === 'night-window' && <div className="reader-night-sky" />}
+                <ReadingRoomScene theme={readingTheme} />
+              </>
+            )}
           </div>
           <div className="book-reader-surface relative z-10 flex h-full w-full items-center justify-center">
             <div
@@ -565,20 +526,26 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
             >
               {/* @ts-expect-error react-pageflip supports this ref at runtime, but omits it from its declaration. */}
               <HTMLFlipBook
-                width={500}
-                height={650}
+                width={430}
+                height={559}
                 size="stretch"
                 minWidth={280}
-                maxWidth={560}
+                maxWidth={480}
                 minHeight={400}
-                maxHeight={720}
+                maxHeight={624}
                 maxShadowOpacity={0.5}
                 showCover={true}
                 mobileScrollSupport={true}
                 key={`${book.id}:${totalFlipPages}:${startPage}`}
                 ref={bookRef}
                 className="demo-book"
-                style={{ '--page-stack-depth': `${pageStackDepth}px` } as React.CSSProperties}
+                style={{
+                  '--page-stack-depth': `${rightPageStackDepth}px`,
+                  '--right-page-stack-depth': `${rightPageStackDepth}px`,
+                  '--left-page-stack-depth': `${leftPageStackDepth}px`,
+                  '--right-page-stack-opacity': rightPageStackDepth > 0 ? 1 : 0,
+                  '--left-page-stack-opacity': leftPageStackDepth > 0 ? 1 : 0,
+                } as React.CSSProperties}
                 usePortrait={true}
                 startPage={startPage}
                 drawShadow={true}
@@ -595,10 +562,25 @@ export function BookReader({ locale = 'ar', bookId }: { locale?: string; bookId:
                     isBlurred={viewMode !== 'spread' && page.pageNumber !== currentIndex + (viewMode === 'right' ? 1 : 0)}
                   />
                 ))}
-                {pages.length % 2 === 1 && <BlankPage key={`${book.id}-back-cover-spacer`} />}
+                {pages.length % 2 === 1 && (
+                  <BlankPage key={`${book.id}-back-cover-spacer`} paperTextureID={book.paper_texture_id} />
+                )}
                 <CoverPage key={`${book.id}-back-cover`} book={book} isBackCover />
               </HTMLFlipBook>
             </div>
+            {readingTheme === 'rain-video' && <BookRainOverlay targetRef={containerRef} />}
+            {currentIndex > 0 && currentIndex < lastFlipPageIndex && (
+              <button
+                type="button"
+                onClick={() => setViewMode((mode) => (mode === 'left' ? 'right' : 'left'))}
+                disabled={isFlipping}
+                className="absolute end-4 top-1/2 z-30 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-[#e0bd72] bg-[#4a321b]/90 text-[#f4d68f] shadow-[0_0_18px_rgba(217,175,87,0.38),inset_0_1px_2px_rgba(255,239,190,0.45)] transition hover:scale-105 hover:bg-[#62431f] disabled:opacity-50"
+                aria-label={isArabic ? 'نقل التكبير إلى الصفحة الأخرى' : 'Move zoom to the other page'}
+                title={isArabic ? 'نقل التكبير إلى الصفحة الأخرى' : 'Move zoom to the other page'}
+              >
+                {viewMode === 'left' ? <ArrowRight size={21} /> : <ArrowLeft size={21} />}
+              </button>
+            )}
             <ReadingCandle isArabic={isArabic} />
             <div className="absolute bottom-5 start-5 z-30 flex items-center gap-2">
               <button

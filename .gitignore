@@ -1,5 +1,6 @@
 node_modules
 .next
+.next-page-preview-*/
 .next-books-build
 .env.local
 .env
