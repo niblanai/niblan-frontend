@@ -12,6 +12,7 @@ function LoginContent() {
   const locale = params?.locale ?? 'en';
   const searchParams = useSearchParams();
   const oauthError = searchParams?.get('oauthError') ?? null;
+  const returnTo = searchParams?.get('returnTo');
   const [authError, setAuthError] = useState<string | null>(oauthError);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -22,7 +23,7 @@ function LoginContent() {
     try {
       const result = await login(data);
       localStorage.setItem('niblan_token', result.token);
-      router.push(`/${locale}`);
+      router.push(returnTo?.startsWith(`/${locale}/`) ? returnTo : `/${locale}`);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'حدث خطأ أثناء تسجيل الدخول');
     } finally {

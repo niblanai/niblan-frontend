@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BookOpen, Bookmark, FileText, Headphones, Mic2 } from 'lucide-react';
-import { getToken } from '@/services/auth.service';
-import { Book, FavoriteArticle, FavoritePage, FavoritesResponse, getFavorites } from '@/services/books.service';
+import { clearToken, getToken } from '@/services/auth.service';
+import { ApiResponseError, Book, FavoriteArticle, FavoritePage, FavoritesResponse, getFavorites } from '@/services/books.service';
 import { BookDetail } from '@/components/books/BookDetail';
 
 type FavoriteKind = 'all' | 'books' | 'pages' | 'articles' | 'audio' | 'podcasts';
@@ -32,7 +32,15 @@ export function FavoritesPage({ locale = 'ar' }: { locale?: string }) {
         if (active) setFavorites(result);
       })
       .catch((cause: unknown) => {
-        if (active) setError(cause instanceof Error ? cause.message : (isArabic ? 'تعذر تحميل المفضلة.' : 'Could not load favorites.'));
+        if (!active) return;
+        if (cause instanceof ApiResponseError && cause.status === 401) {
+          clearToken();
+          setError(isArabic
+            ? 'تعذر التحقق من جلسة الدخول. سجّل الدخول مجددًا لعرض مفضلتك.'
+            : 'Your session could not be verified. Sign in again to view your favorites.');
+          return;
+        }
+        setError(cause instanceof Error ? cause.message : (isArabic ? 'تعذر تحميل المفضلة.' : 'Could not load favorites.'));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -163,7 +171,7 @@ export function FavoritesPage({ locale = 'ar' }: { locale?: string }) {
         </nav>
 
         {loading ? <p className="py-20 text-center text-sm text-[#716b60]">{isArabic ? 'جارٍ تحميل المفضلة...' : 'Loading favorites...'}</p>
-          : error ? <div className="py-20 text-center"><p role="alert" className="text-sm text-[#9d3a2f]">{error}</p><button onClick={() => router.push(`/${locale}/auth/login`)} className="mt-4 border-b border-[#98752c] pb-1 text-sm text-[#634c17]">{isArabic ? 'تسجيل الدخول' : 'Sign in'}</button></div>
+          : error ? <div className="py-20 text-center"><p role="alert" className="text-sm text-[#9d3a2f]">{error}</p><button onClick={() => router.push(`/${locale}/auth/login?returnTo=${encodeURIComponent(`/${locale}/favorites`)}`)} className="mt-4 border-b border-[#98752c] pb-1 text-sm text-[#634c17]">{isArabic ? 'تسجيل الدخول' : 'Sign in'}</button></div>
             : <div>{contentByKind[kind]}</div>}
       </div>
       {selectedBook && <BookDetail book={selectedBook} locale={locale} onClose={() => setSelectedBook(null)} />}

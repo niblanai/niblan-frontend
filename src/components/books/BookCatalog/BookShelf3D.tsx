@@ -31,6 +31,13 @@ type LoadedShelf = {
 
 const SHELF_MODEL = '/books-design/BookSelf.fbx';
 const BOOK_MODEL = '/books-design/OldBook001.fbx';
+const LAMP_MODEL = '/10003_Lamp_Textures/10003_Lamp.fbx';
+const LAMP_TEXTURE_PATHS: Record<string, string> = {
+  'fabric_bump.jpg': '/10003_Lamp_Textures/Fabric_bump.jpg',
+  'fabric_refl.jpg': '/10003_Lamp_Textures/Fabric_refl.jpg',
+  'lamp_fabric_dif.png': '/10003_Lamp_Textures/Lamp_Fabric_DIF.png',
+  'lamp_porcelan_dif.png': '/10003_Lamp_Textures/Lamp_Porcelan_DIF.png',
+};
 const MAX_BOOKS_PER_SECTION = 12;
 const BOOKS_PER_FULL_ROW = MAX_BOOKS_PER_SECTION * 2;
 const MAX_BOOKS_PER_OVERVIEW_BAY = 15;
@@ -298,13 +305,22 @@ export function BookShelf3D({ sections, selectedCategory, locale, onSelectBook }
     let disposed = false;
     let frameId = 0;
     let model: THREE.Group | null = null;
+    let lampModel: THREE.Group | null = null;
+    let floorReflection: THREE.Mesh | null = null;
     let woodTexture: THREE.Texture | null = null;
     let woodMaterial: THREE.MeshStandardMaterial | null = null;
     const scene = new THREE.Scene();
     scene.background = null;
 
     const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
+    } catch (error) {
+      console.error('Could not create the 3D bookshelf renderer.', error);
+      setLoadError('WebGL is unavailable.');
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -588,6 +604,110 @@ export function BookShelf3D({ sections, selectedCategory, locale, onSelectBook }
           scrollFocus: null,
           cameraFocus: null,
         };
+        const lampLoadingManager = new THREE.LoadingManager();
+        lampLoadingManager.setURLModifier((url) => {
+          const fileName = url.split(/[\\/]/).pop()?.split(/[?#]/)[0]?.toLowerCase();
+          return fileName ? LAMP_TEXTURE_PATHS[fileName] ?? url : url;
+        });
+        new FBXLoader(lampLoadingManager).load(
+          LAMP_MODEL,
+          (loadedLamp) => {
+            if (disposed) {
+              disposeObject(loadedLamp);
+              return;
+            }
+
+            loadedLamp.updateMatrixWorld(true);
+            const lampBounds = new THREE.Box3().setFromObject(loadedLamp);
+            const lampSize = lampBounds.getSize(new THREE.Vector3());
+            if (
+              !Number.isFinite(lampSize.x)
+              || !Number.isFinite(lampSize.y)
+              || !Number.isFinite(lampSize.z)
+              || lampSize.x <= 0
+              || lampSize.y <= 0
+              || lampSize.z <= 0
+            ) {
+              console.error('The 3D lamp model has invalid dimensions.');
+              disposeObject(loadedLamp);
+              return;
+            }
+
+            const lampScale = (size.y * 0.68 * 0.9) / lampSize.y;
+            const lampCenter = lampBounds.getCenter(new THREE.Vector3());
+            loadedLamp.scale.setScalar(lampScale);
+            loadedLamp.position.set(
+              -size.x * 0.82 - lampCenter.x * lampScale,
+              size.y * 0.02 - lampBounds.min.y * lampScale,
+              size.z * 0.58 - lampCenter.z * lampScale,
+            );
+            loadedLamp.name = 'Reading room floor lamp';
+            loadedLamp.traverse((object) => {
+              if (object instanceof THREE.Mesh) {
+                const materials = Array.isArray(object.material) ? object.material : [object.material];
+                object.castShadow = true;
+                object.receiveShadow = true;
+                materials.forEach((material) => {
+                  const materialLabel = `${object.name} ${material.name} ${material.map?.name ?? ''}`;
+                  if (
+                    !/fabric|shade|lampshade/i.test(materialLabel)
+                    || !(material instanceof THREE.MeshPhongMaterial || material instanceof THREE.MeshStandardMaterial)
+                  ) return;
+
+                  material.side = THREE.DoubleSide;
+                  material.needsUpdate = true;
+                });
+              }
+            });
+            const lampLight = new THREE.PointLight('#ffc979', 12, 7, 2);
+            lampLight.position.set(
+              lampCenter.x,
+              lampBounds.min.y + lampSize.y * 0.82,
+              lampBounds.max.z + lampSize.z * 0.08,
+            );
+            loadedLamp.add(lampLight);
+
+            const reflectionCanvas = document.createElement('canvas');
+            reflectionCanvas.width = 128;
+            reflectionCanvas.height = 128;
+            const reflectionContext = reflectionCanvas.getContext('2d');
+            if (!reflectionContext) {
+              console.error('Could not create the lamp floor reflection texture.');
+              disposeObject(loadedLamp);
+              return;
+            }
+            const reflectionGradient = reflectionContext.createRadialGradient(64, 64, 2, 64, 64, 64);
+            reflectionGradient.addColorStop(0, 'rgba(255, 184, 92, 0.38)');
+            reflectionGradient.addColorStop(0.45, 'rgba(255, 160, 65, 0.14)');
+            reflectionGradient.addColorStop(1, 'rgba(255, 160, 65, 0)');
+            reflectionContext.fillStyle = reflectionGradient;
+            reflectionContext.fillRect(0, 0, 128, 128);
+            const reflectionTexture = new THREE.CanvasTexture(reflectionCanvas);
+            reflectionTexture.colorSpace = THREE.SRGBColorSpace;
+            floorReflection = new THREE.Mesh(
+              new THREE.PlaneGeometry(2.1, 1.35),
+              new THREE.MeshBasicMaterial({
+                map: reflectionTexture,
+                transparent: true,
+                opacity: 0.72,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending,
+              }),
+            );
+            floorReflection.rotation.x = -Math.PI / 2;
+            floorReflection.position.set(
+              loadedLamp.position.x + lampCenter.x * lampScale,
+              size.y * 0.025,
+              loadedLamp.position.z + (lampBounds.max.z + lampSize.z * 0.18) * lampScale,
+            );
+            floorReflection.name = 'Reading lamp floor reflection';
+            scene.add(floorReflection);
+            lampModel = loadedLamp;
+            scene.add(loadedLamp);
+          },
+          undefined,
+          (error) => console.error('Could not load the 3D lamp model.', error),
+        );
         setLoadError('');
         setIsReady(true);
       },
@@ -606,6 +726,8 @@ export function BookShelf3D({ sections, selectedCategory, locale, onSelectBook }
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerleave', onPointerLeave);
       if (model) disposeObject(model);
+      if (lampModel) disposeObject(lampModel);
+      if (floorReflection) disposeObject(floorReflection);
       if (bookModelRef.current) {
         disposeObject(bookModelRef.current);
         bookModelRef.current = null;
