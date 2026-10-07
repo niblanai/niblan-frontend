@@ -1475,7 +1475,6 @@ export function BookCatalog({
                 {item.name}
               </span>
 
-
               <span
                 className="catalog-category-tab__count"
               >

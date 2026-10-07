@@ -93,9 +93,19 @@ async function readResponse<T>(response: Response): Promise<T> {
 		}
 	}
 	if (!response.ok) {
-		throw new Error(payload?.error || response.statusText || `Request failed (HTTP ${response.status})`);
+		throw new ApiResponseError(
+			payload?.error || response.statusText || `Request failed (HTTP ${response.status})`,
+			response.status,
+		);
 	}
 	return payload as T;
+}
+
+export class ApiResponseError extends Error {
+	constructor(message: string, public readonly status: number) {
+		super(message);
+		this.name = 'ApiResponseError';
+	}
 }
 
 export async function getPublicBooks(catalogueSlug?: string, perCategoryLimit?: number): Promise<Book[]> {
